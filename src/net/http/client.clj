@@ -18,16 +18,18 @@
 
            io.netty.handler.logging.LoggingHandler
            io.netty.handler.logging.LogLevel
-           io.netty.handler.codec.http.FullHttpRequest
+           io.netty.handler.codec.http.HttpClientCodec
            io.netty.handler.codec.http.HttpRequest
            io.netty.handler.codec.http.HttpMethod
            io.netty.handler.codec.http.HttpHeaders
            io.netty.handler.codec.http.HttpResponseStatus
-           io.netty.handler.codec.http.DefaultFullHttpRequest
            io.netty.handler.codec.http.HttpVersion
            io.netty.handler.codec.http.HttpObjectAggregator
+           io.netty.handler.codec.http.FullHttpResponse
+           io.netty.handler.codec.http.DefaultFullHttpRequest
            io.netty.handler.codec.http.QueryStringDecoder
-           io.netty.buffer.Unpooled
+           io.netty.handler.ssl.SslContextBuilder
+           io.netty.handler.ssl.SslContext
            java.net.URI
            java.nio.charset.Charset))
 
@@ -41,18 +43,6 @@
   [bb]
   (.toString bb (Charset/forName "UTF-8")))
 
-(def method->data
-  "Yield a keyword representing an HTTP method."
-  {HttpMethod/CONNECT :connect
-   HttpMethod/DELETE  :delete
-   HttpMethod/GET     :get
-   HttpMethod/HEAD    :head
-   HttpMethod/OPTIONS :options
-   HttpMethod/PATCH   :patch
-   HttpMethod/POST    :post
-   HttpMethod/PUT     :put
-   HttpMethod/TRACE   :trace})
-
 (defn headers
   "Get a map out of netty headers."
   [^HttpHeaders headers]
@@ -61,56 +51,21 @@
    (for [[^String k ^String v] (-> headers .entries seq)]
      [(-> k .toLowerCase keyword) v])))
 
-(defn data->response
-  "Create a netty full http response from a map."
-  [{:keys [status body headers]} version]
-  (let [resp (DefaultFullHttpResponse.
-               version
-               (HttpResponseStatus/valueOf (int status))
-               (Unpooled/wrappedBuffer (.getBytes body)))
-        hmap (.headers resp)]
-    (doseq [[k v] headers]
-      (.set hmap (name k) v))
-    resp))
-
-(defn ->params
-  [^QueryStringDecoder dx]
-  (reduce
-   merge {}
-   (for [[k vlist] (.parameters dx)
-         :let [vs (seq vlist)]]
-     [(keyword (str k)) (if (< 1 (count vs)) vs (first vs))])))
-
-(defn body-params
-  [^FullHttpRequest msg headers body]
-  (when-let [content-type (:content-type headers)]
-    (when (.startsWith content-type "application/x-www-form-urlencoded")
-      (QueryStringDecoder. body false))))
-
-(defn request-handler
+(defn response-handler
   "Capture context and msg and yield a closure
    which generates a response.
 
    The closure may be called at once or submitted to a pool."
-  [f ^ChannelHandlerContext ctx ^FullHttpRequest msg]
+  [f ^ChannelHandlerContext ctx ^FullHttpResponse msg]
   (fn []
     (try
       (let [headers (headers (.headers msg))
             body    (bb->string (.content msg))
-            dx      (QueryStringDecoder. (.getUri msg))
-            p1      (->params dx)
-            p2      (some-> msg (body-params headers body) ->params)
-            req     {:uri            (.path dx)
-                     :get-params     p1
-                     :body-params    p2
-                     :params         (merge p1 p2)
-                     :request-method (method->data (.getMethod msg))
-                     :version        (-> msg .getProtocolVersion .text)
+            req     {:status         (some-> msg .getStatus .code)
                      :headers        headers
-                     :body           body}
-            resp (data->response (f req) (.getProtocolVersion msg))]
-        (-> (.writeAndFlush ctx resp)
-            (.addListener ChannelFutureListener/CLOSE)))
+                     :version        (-> msg .getProtocolVersion .text)
+                     :body           body}]
+        (f req))
       (finally
         ;; This actually releases the content
         (.release msg)))))
@@ -121,25 +76,24 @@
   [f]
   (proxy [ChannelInboundHandlerAdapter] []
     (exceptionCaught [^ChannelHandlerContext ctx e]
-      (f {:request-method })
-      (error e "http server exception caught"))
-    (channelRead [^ChannelHandlerContext ctx ^FullHttpRequest msg]
-      (let [callback (request-handler f ctx msg)]
+      (f {:status 5555 :error e}))
+    (channelRead [^ChannelHandlerContext ctx ^FullHttpResponse msg]
+      (let [callback (response-handler f ctx msg)]
         (callback)))))
 
 (defn ssl-ctx-handler
-  []
-  (let [ctx ]))
-(defn initializer
+  [ssl-ctx channel]
+  (.newHandler ssl-ctx (.alloc channel)))
+
+(defn request-initializer
   "Our channel initializer."
-  [ssl-ctx-handler handler]
+  [ssl-ctx handler]
   (proxy [ChannelInitializer] []
     (initChannel [channel]
       (let [pipeline (.pipeline channel)]
-        (when ssl-ctx-handler
-          (.addLast pipeline "ssl" (ssl-ctx-handler channel)))
-        (.addLast pipeline "ssl"        )
-        (.addLast pipeline "codec"      (HttpServerCodec.))
+        (when ssl-ctx
+          (.addLast pipeline "ssl" (ssl-ctx-handler ssl-ctx channel)))
+        (.addLast pipeline "codec"      (HttpClientCodec.))
         (.addLast pipeline "aggregator" (HttpObjectAggregator. 1048576))
         (.addLast pipeline "handler"    (netty-handler handler))))))
 
@@ -177,24 +131,32 @@
       :else        (throw e))))
 
 (defn data->headers
-  [headers input]
-  (when-not (map? input)
+  [headers input host]
+  (when-not (or (empty? input) (map? input))
     (throw (ex-info "HTTP headers should be supplied as a map" {})))
+  (.set headers "host" host)
+  (when-not (or (get headers :connection)
+                (get headers "connection"))
+    (.set headers "connection" "close"))
   (doseq [[k v] input]
     (.set headers (name k) (str v))))
 
 (defn data->body
-  [request method body params]
+  [request method body]
+  (when body
+    (let [bytes (cond
+                  (string? body) (.getBytes body)
+                  :else          (throw (ex-info "wrong body type" {})))]
+      (-> request .content .clear .writeBytes bytes))))
 
-  )
-
-(defn data->req
-  [{:keys [body headers method version uri params]}]
+(defn data->request
+  [{:keys [body headers request-method version uri]}]
   (let [version (data->version version)
-        method  (data->method method)
-        request (DefaultFullHttpRequest. version method uri)]
-    (data->headers (.headers request) headers)
-    (data->body request method body params)))
+        method  (data->method request-method)
+        request (DefaultFullHttpRequest. version method (.getRawPath uri))]
+    (data->headers (.headers request) headers (.getHost uri))
+    (data->body request method body)
+    request))
 
 (defn build-client
   ([]
@@ -208,56 +170,29 @@
          thread-count (or (:loop-thread-count options) 1)
          boss-group   (if use-epoll?
                         (EpollEventLoopGroup. thread-count)
-                        (NioEventLoopGroup.   thread-count))]
+                        (NioEventLoopGroup.   thread-count))
+         ctx          (.build (SslContextBuilder/forClient))]
      {:group   boss-group
+      :ssl-ctx ctx
       :channel (if use-epoll? EpollSocketChannel NioSocketChannel)})))
 
 (defn request
-  ([request-map]
-   (request (build-client) request-map))
-  ([{:keys [group channel]} request-map]
-   (when-not (:url request-map)
-     (throw (ex-info "malformed request-map, needs :url key" {})))
-   (let [uri    (URI. (:url request-map))
-         scheme (if-let [scheme (.getScheme uri) (.toLowerCase scheme) "http"])
-         port   (cond (not= -1 (.getPort uri) (.getPort uri))
+  ([request-map handler]
+   (request (build-client {}) request-map handler))
+  ([{:keys [group channel ssl-ctx]} request-map handler]
+   (when-not (:uri request-map)
+     (throw (ex-info "malformed request-map, needs :uri key" {})))
+   (let [uri    (URI. (:uri request-map))
+         scheme (if-let [scheme (.getScheme uri)] (.toLowerCase scheme) "http")
+         host   (.getHost uri)
+         port   (cond (not= -1 (.getPort uri)) (.getPort uri)
                       (= "http" scheme) 80
                       (= "https" scheme) 443)
          ssl?   (= "https" scheme)
-         bootstrap (doto (Bootstrap.)
-                     (.group   group)
-                     (.channel channel)
-                     (.handler)
-                     (.childHandler (request-initalizer ssl?))
-                     )
-         ])
-   ))
-
-(defn build-client
-  "Prepare a bootstrap channel and start it."
-  ([]
-   (build-client {}))
-  ([options]
-   (let [log-handler  (when-let [level (some-> (:logging options)
-                                               keyword
-                                               (get log-levels))]
-                        (LoggingHandler. level))
-         thread-count (or (:loop-thread-count options) 1)
-         boss-group   (if (and (epoll?) (not (:disable-epoll options)))
-                        (EpollEventLoopGroup. thread-count)
-                        (NioEventLoopGroup.   thread-count))
-         so-backlog   (int (or (:so-backlog options) 1024))]
-     (try
-       (let [bootstrap (doto (Bootstrap.)
-                         (.group boss-group)
-                         (.channel (if (epoll?)
-                                     EpollServerSocketChannel
-                                     NioServerSocketChannel))
-                         (.handler )
-                         (.childHandler (initializer (:ring-handler options))))
-             channel   (-> bootstrap
-                           (cond-> log-handler (.handler log-handler))
-                           (.bind ^String (or (:host options) "127.0.0.1")
-                                  (int (or (:port options) 8080)))
-                           (.sync)
-                           (.channel))])))))
+         bs     (doto (Bootstrap.)
+                  (.group   group)
+                  (.channel channel)
+                  (.handler (request-initializer (when ssl? ssl-ctx) handler)))
+         ch     (some-> bs (.connect host (int port)) .sync .channel)]
+     (.writeAndFlush ch (data->request (assoc request-map :uri uri)))
+     (-> ch .closeFuture .sync))))

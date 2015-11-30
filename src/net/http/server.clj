@@ -117,8 +117,7 @@
   [f]
   (proxy [ChannelInboundHandlerAdapter] []
     (exceptionCaught [^ChannelHandlerContext ctx e]
-      (f {:request-method :error :error e})
-      (error e "http server exception caught"))
+      (f {:request-method :error :error e}))
     (channelRead [^ChannelHandlerContext ctx ^FullHttpRequest msg]
       (let [callback (request-handler f ctx msg)]
         (callback)))))
@@ -170,4 +169,4 @@
            (-> channel .closeFuture .sync))
          (fn []
            (.close channel)
-           (.shutdownGracefully group)))))))
+           (.shutdownGracefully boss-group)))))))
