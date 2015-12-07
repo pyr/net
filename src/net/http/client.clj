@@ -152,7 +152,7 @@
   [{:keys [body headers request-method version uri]}]
   (let [version (data->version version)
         method  (data->method request-method)
-        path    (str (.getRawPath uri) "?" (.getRawquery uri))
+        path    (str (.getRawPath uri) "?" (.getRawQuery uri))
         request (DefaultFullHttpRequest. version method uri)]
     (data->headers (.headers request) headers (.getHost uri))
     (data->body request method body)
