@@ -27,7 +27,6 @@
            io.netty.handler.codec.http.HttpObjectAggregator
            io.netty.handler.codec.http.FullHttpResponse
            io.netty.handler.codec.http.DefaultFullHttpRequest
-           io.netty.handler.codec.http.QueryStringDecoder
            io.netty.handler.ssl.SslContextBuilder
            io.netty.handler.ssl.SslContext
            java.net.URI
@@ -153,7 +152,8 @@
   [{:keys [body headers request-method version uri]}]
   (let [version (data->version version)
         method  (data->method request-method)
-        request (DefaultFullHttpRequest. version method (.getRawPath uri))]
+        path    (str (.getRawPath uri) "?" (.getRawquery uri))
+        request (DefaultFullHttpRequest. version method uri)]
     (data->headers (.headers request) headers (.getHost uri))
     (data->body request method body)
     request))

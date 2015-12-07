@@ -1,7 +1,6 @@
-(defproject spootnik/net "0.1.0-SNAPSHOT"
-  :description "FIXME: write description"
-  :url "http://example.com/FIXME"
-  :license {:name "Eclipse Public License"
-            :url "http://www.eclipse.org/legal/epl-v10.html"}
+(defproject spootnik/net "0.2.1"
+  :description "the clojure netty companion"
+  :url "https://github.com/pyr/net"
+  :license {:name "MIT License"}
   :dependencies [[org.clojure/clojure "1.7.0"]
-                 [io.netty/netty-all  "4.0.32.Final"]])
+                 [io.netty/netty-all  "4.0.33.Final"]])
