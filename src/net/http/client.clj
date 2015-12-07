@@ -146,7 +146,7 @@
     (let [bytes (cond
                   (string? body) (.getBytes body)
                   :else          (throw (ex-info "wrong body type" {})))]
-      (-> request .content .clear .writeBytes bytes))))
+      (-> request .content .clear (.writeBytes bytes)))))
 
 (defn data->request
   [{:keys [body headers request-method version uri]}]
