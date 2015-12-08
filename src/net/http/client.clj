@@ -1,5 +1,6 @@
 (ns net.http.client
   "Small wrapper around netty for HTTP clients."
+  (:require [net.codec.b64 :as b64])
   (:import io.netty.bootstrap.Bootstrap
            io.netty.channel.ChannelHandlerContext
            io.netty.channel.ChannelHandlerAdapter
@@ -33,10 +34,6 @@
            java.net.URI
            java.nio.charset.Charset
            javax.xml.bind.DatatypeConverter))
-
-(defn ^String s->b64
-  [^String s]
-  (-> s .getBytes DatatypeConverter/printBase64Binary))
 
 (defn epoll?
   "Find out if epoll is available on the underlying platform."
@@ -149,8 +146,8 @@
 (defn auth->headers
   [headers {:keys [user password]}]
   (when (and user password)
-    (let [line (format "Basic %s" (s->b64 (str user ":" password)))]
-      (.set headers "Authorization" line))))
+    (.set headers "Authorization"
+          (format "Basic %s" (b64/s->b64 (str user ":" password))))))
 
 (defn data->body
   [request method body]
