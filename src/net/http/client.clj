@@ -27,10 +27,16 @@
            io.netty.handler.codec.http.HttpObjectAggregator
            io.netty.handler.codec.http.FullHttpResponse
            io.netty.handler.codec.http.DefaultFullHttpRequest
+           io.netty.handler.codec.http.QueryStringEncoder
            io.netty.handler.ssl.SslContextBuilder
            io.netty.handler.ssl.SslContext
            java.net.URI
-           java.nio.charset.Charset))
+           java.nio.charset.Charset
+           javax.xml.bind.DatatypeConverter))
+
+(defn ^String s->b64
+  [^String s]
+  (-> s .getBytes DatatypeConverter/printBase64Binary))
 
 (defn epoll?
   "Find out if epoll is available on the underlying platform."
@@ -140,21 +146,45 @@
   (doseq [[k v] input]
     (.set headers (name k) (str v))))
 
+(defn auth->headers
+  [headers {:keys [user password]}]
+  (when (and user password)
+    (let [line (format "Basic %s" (s->b64 (str user ":" password)))]
+      (.set headers "Authorization" line))))
+
 (defn data->body
   [request method body]
   (when body
-    (let [bytes (cond
-                  (string? body) (.getBytes body)
-                  :else          (throw (ex-info "wrong body type" {})))]
-      (-> request .content .clear (.writeBytes bytes)))))
+    (let [headers (.headers request)
+          bytes   (cond
+                    (string? body) (.getBytes body)
+                    :else          (throw (ex-info "wrong body type" {})))]
+      (-> request .content .clear (.writeBytes bytes))
+      (when-not (.get headers "Content-Length")
+        (.set headers "Content-Length" (count body))))))
+
+(defn data->uri
+  [^URI uri query]
+  (if (seq query)
+    (let [qse (QueryStringEncoder. (str uri))]
+      (doseq [[k v] query]
+        (if (sequential? v)
+          (doseq [subv v]
+            (.addParam qse (name k) (str subv)))
+          (.addParam qse (name k) (str v))))
+      (.toUri qse))
+    uri))
 
 (defn data->request
-  [{:keys [body headers request-method version uri]}]
-  (let [version (data->version version)
+  [{:keys [body headers request-method version query uri auth]}]
+  (let [uri     (data->uri uri query)
+        version (data->version version)
         method  (data->method request-method)
         path    (str (.getRawPath uri) "?" (.getRawQuery uri))
         request (DefaultFullHttpRequest. version method path)]
     (data->headers (.headers request) headers (.getHost uri))
+    (when auth
+      (auth->headers (.headers request) auth))
     (data->body request method body)
     request))
 
@@ -176,9 +206,9 @@
       :ssl-ctx ctx
       :channel (if use-epoll? EpollSocketChannel NioSocketChannel)})))
 
-(defn request
+(defn async-request
   ([request-map handler]
-   (request (build-client {}) request-map handler))
+   (async-request (build-client {}) request-map handler))
   ([{:keys [group channel ssl-ctx]} request-map handler]
    (when-not (:uri request-map)
      (throw (ex-info "malformed request-map, needs :uri key" {})))
@@ -196,3 +226,11 @@
          ch     (some-> bs (.connect host (int port)) .sync .channel)]
      (.writeAndFlush ch (data->request (assoc request-map :uri uri)))
      (-> ch .closeFuture .sync))))
+
+(defn request
+  ([request-map]
+   (request (build-client {}) request-map))
+  ([client request-map]
+   (let [p (promise)]
+     (async-request client request-map (fn [resp] (deliver p resp)))
+     (deref p))))
