@@ -1,6 +1,7 @@
 (ns net.http.client
   "Small wrapper around netty for HTTP clients."
-  (:require [net.codec.b64 :as b64])
+  (:require [net.codec.b64 :as b64]
+            [net.ssl       :as ssl])
   (:import io.netty.bootstrap.Bootstrap
            io.netty.channel.ChannelHandlerContext
            io.netty.channel.ChannelHandlerAdapter
@@ -29,7 +30,6 @@
            io.netty.handler.codec.http.FullHttpResponse
            io.netty.handler.codec.http.DefaultFullHttpRequest
            io.netty.handler.codec.http.QueryStringEncoder
-           io.netty.handler.ssl.SslContextBuilder
            io.netty.handler.ssl.SslContext
            java.net.URI
            java.nio.charset.Charset
@@ -198,7 +198,7 @@
          boss-group   (if use-epoll?
                         (EpollEventLoopGroup. thread-count)
                         (NioEventLoopGroup.   thread-count))
-         ctx          (.build (SslContextBuilder/forClient))]
+         ctx          (ssl/netty-client-context (:ssl options))]
      {:group   boss-group
       :ssl-ctx ctx
       :channel (if use-epoll? EpollSocketChannel NioSocketChannel)})))
