@@ -10,3 +10,15 @@
 (defn await
   [^Channel channel]
   (.await channel))
+
+(defn write!
+  [channel msg]
+  (.write channel msg))
+
+(defn flush!
+  [channel]
+  (.flush channel))
+
+(defn write-and-flush!
+  [channel msg]
+  (.writeAndFlush channel msg))
