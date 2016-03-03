@@ -1,6 +1,7 @@
-(ns net.channel
-  (:import netty.channel.ChannelFuture
-           netty.channel.Channel))
+(ns net.ty.channel
+  (:refer-clojure :exclude [await])
+  (:import io.netty.channel.ChannelFuture
+           io.netty.channel.Channel))
 
 (defn ^Channel channel
   [^ChannelFuture channel-future]

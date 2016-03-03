@@ -1,9 +1,11 @@
-(ns net.bootstrap
+(ns net.ty.bootstrap
   (:require [schema.core :as s])
   (:import java.net.InetAddress
            java.net.NetworkInterface
+           java.net.SocketAddress
            io.netty.util.AttributeKey
            io.netty.bootstrap.ServerBootstrap
+           io.netty.bootstrap.Bootstrap
            io.netty.buffer.ByteBufAllocator
            io.netty.channel.RecvByteBufAllocator
            io.netty.channel.MessageSizeEstimator
@@ -12,6 +14,8 @@
            io.netty.channel.EventLoopGroup
            io.netty.channel.nio.NioEventLoopGroup
            io.netty.channel.socket.nio.NioServerSocketChannel
+           io.netty.channel.socket.nio.NioSocketChannel
+           io.netty.channel.socket.nio.NioDatagramChannel
            ))
 
 (def channel-option-schema
@@ -66,6 +70,11 @@
    :write-buffer-low-water-mark ChannelOption/WRITE_BUFFER_LOW_WATER_MARK
    :write-spin-count ChannelOption/WRITE_SPIN_COUNT})
 
+(defn ^ChannelOption ->channel-option
+  [^clojure.lang.Keyword k]
+  (or (channel-options k)
+      (throw (ex-info (str "invalid channel option: " (name k)) {}))))
+
 (def server-bootstrap-schema
   {(s/optional-key :options)       channel-option-schema
    (s/optional-key :child-options) channel-option-schema
@@ -75,16 +84,26 @@
    :group                          EventLoopGroup
    :handler                        ChannelHandler})
 
-(defn ^ChannelOption ->channel-option
-  [^clojure.lang.Keyword k]
-  (or (channel-options k)
-      (throw (ex-info (str "invalid channel option: " (name k)) {}))))
+(def bootstrap-schema
+  {(s/optional-key :options)  channel-option-schema
+   (s/optional-key :attrs)    {s/Keyword s/Any}
+   (s/optional-key :channel)  java.lang.Class
+   :group                     EventLoopGroup
+   :handler                   ChannelHandler})
+
+(def nio-server-socket-channel NioServerSocketChannel)
+(def nio-socket-channel        NioSocketChannel)
+(def nio-datagram-channel      NioDatagramChannel)
+
+(defn nio-event-loop-group
+  []
+  (NioEventLoopGroup.))
 
 (s/defn ^ServerBoostrap server-bootstrap :- ServerBootstrap
   [config :- server-bootstrap-schema]
   (let [bs (ServerBootstrap.)]
-    (.group   bs (or (:group config) (NioEventLoopGroup.)))
-    (.channel bs (or (:channel config) NioServerSocketChannel))
+    (.group   bs (or (:group config) (nio-event-loop-group)))
+    (.channel bs (or (:channel config) nio-server-socket-channel))
     (doseq [[k v] (:options config) :let [copt (->channel-option k)]]
       (.option bs copt (if (number? v) (int v) v)))
     (doseq [[k v] (:child-options config) :let [copt (->channel-option k)]]
@@ -96,12 +115,38 @@
     (.handler bs (:handler config))
     (.validate bs)))
 
+(s/defn ^Bootstrap bootstrap :- Bootstrap
+  [config :- bootstrap-schema]
+  (let [bs (Bootstrap.)]
+    (.group bs (or (:group config) (nio-event-loop-group)))
+    (.channel bs (or (:channel config) nio-socket-channel))
+    (doseq [[k v] (:options config) :let [copt (->channel-option k)]]
+      (.option bs copt (if (number? v) (int v) v)))
+    (doseq [[k v] (:attrs config)]
+      (.attr bs (AttributeKey/valueOf (name k)) v))
+    (.handler bs (:handler config))
+    (.validate bs)))
 
 (defn bind!
   [^ServerBootstrap bs ^String host ^Long port]
   (.bind bs host (int port)))
 
-(defn get-channel
-  [^ServerBootstrap bs]
+(defn remote-address!
+  ([bs ^SocketAddress sa]
+   (.remoteAddress bs sa))
+  ([bs host ^Long port]
+   (.remoteAddress bs host (int port))))
 
-  )
+(defn connect!
+  ([bs]
+   (.connect bs))
+  ([bs ^SocketAddress sa]
+   (.connect bs sa))
+  ([bs x y]
+   (.connect bs x y)))
+
+(defn local-address!
+  ([bs x]
+   (.localAddress bs x))
+  ([bs x y]
+   (.localAddress bs x y)))

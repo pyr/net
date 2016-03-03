@@ -1,4 +1,4 @@
-(ns net.pipeline
+(ns net.ty.pipeline
   (:import java.util.concurrent.TimeUnit
            java.nio.ByteOrder
            io.netty.util.CharsetUtil
@@ -179,7 +179,7 @@
         (is-sharable? adapter)))))
 
 (defn flush!
-  [^ChanndlerHandlerContext ctx]
+  [^ChannelHandlerContext ctx]
   (.flush ctx))
 
 (defn write!
