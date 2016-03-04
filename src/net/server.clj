@@ -35,10 +35,11 @@
                    :so-backlog             128
                    :connect-timeout-millis 1000}
    :handler       (pipeline/channel-initializer pipeline)})
+
+
 (comment
 
-  (def bound
-    (.bind (bootstrap/server-bootstrap bootstrap) "127.0.0.1" (int 6379)))
-  (def chan
-    (.channel bound))
-  (-> chan .close .syncUninterruptibly))
+  (def server (bind! (bootstrap/server-bootstrap bootstrap) "localhost" 6379))
+  (defn close [] (-> server channel/channel channel/close! channel/sync-uninterruptibly!))
+
+  )
