@@ -12,12 +12,10 @@
     (capabilities [this]
       #{:channel-active :channel-read})
     (channel-active [this ctx]
-      (channel/add-to-group channel-group (channel/channel ctx))
-      (channel/write-and-flush! ctx "welcome dear client"))
+      (channel/add-to-group channel-group (channel/channel ctx)))
     (channel-read [this ctx msg]
       (if (= msg "quit")
         (do (channel/write-and-flush! ctx "bye!")
-            (channel/remove-from-group channel-group (channel/channel ctx))
             (channel/close! ctx))
         (let [src (channel/channel ctx)]
           (doseq [dst channel-group :when (not= dst src)]
@@ -43,5 +41,4 @@
     (.bind (bootstrap/server-bootstrap bootstrap) "127.0.0.1" (int 6379)))
   (def chan
     (.channel bound))
-  (-> chan .close .syncUninterruptibly)
-  )
+  (-> chan .close .syncUninterruptibly))
