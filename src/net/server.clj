@@ -4,7 +4,7 @@
             [net.ty.pipeline  :as pipeline]))
 
 (defn chat-adapter
-  []
+  [channel-group]
   (reify
     pipeline/HandlerAdapter
     (is-sharable? [this]
@@ -12,29 +12,36 @@
     (capabilities [this]
       #{:channel-active :channel-read})
     (channel-active [this ctx]
-      (channel/write-and-flush! ctx "welcome dear client\r\n"))
+      (channel/add-to-group channel-group (channel/channel ctx))
+      (channel/write-and-flush! ctx "welcome dear client"))
     (channel-read [this ctx msg]
-      (channel/write-and-flush! ctx "ok, thanks!\r\n"))))
+      (if (= msg "quit")
+        (do (channel/write-and-flush! ctx "bye!")
+            (channel/remove-from-group channel-group (channel/channel ctx))
+            (channel/close! ctx))
+        (let [src (channel/channel ctx)]
+          (doseq [dst channel-group :when (not= dst src)]
+            (channel/write-and-flush! dst msg)))))))
 
 (def pipeline
-  [(pipeline/line-based-frame-decoder)
-   pipeline/string-decoder
-   pipeline/string-encoder
-   (pipeline/read-timeout-handler 1)
-   (pipeline/make-handler-adapter (chat-adapter))])
+  (let [group (channel/channel-group "clients")]
+    [(pipeline/line-based-frame-decoder)
+     pipeline/string-decoder
+     pipeline/string-encoder
+     pipeline/line-frame-encoder
+     (pipeline/read-timeout-handler 60)
+     (pipeline/make-handler-adapter (chat-adapter group))]))
 
 (def bootstrap
   {:child-options {:so-keepalive           true
                    :so-backlog             128
                    :connect-timeout-millis 1000}
    :handler       (pipeline/channel-initializer pipeline)})
-
-
 (comment
 
-  (.bind (bootstrap/server-bootstrap bootstrap) "127.0.0.1" (int 6379))
-
-  (def c (.channel *1))
-
-  (-> c .close .syncUninterruptibly)
+  (def bound
+    (.bind (bootstrap/server-bootstrap bootstrap) "127.0.0.1" (int 6379)))
+  (def chan
+    (.channel bound))
+  (-> chan .close .syncUninterruptibly)
   )

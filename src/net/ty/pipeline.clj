@@ -14,6 +14,7 @@
            io.netty.handler.codec.LineBasedFrameDecoder
            io.netty.handler.codec.LengthFieldBasedFrameDecoder
            io.netty.handler.codec.LengthFieldPrepender
+           io.netty.handler.codec.MessageToMessageEncoder
            io.netty.channel.socket.SocketChannel))
 
 (defprotocol HandlerAdapter
@@ -104,6 +105,12 @@
   ([^Long max-length ^Boolean  strip-delimiter? fail-fast?]
    (let [max-length (int max-length)]
      (fn [] (LineBasedFrameDecoder. max-length strip-delimiter? fail-fast?)))))
+
+(defn ^ChannelHandler line-frame-encoder
+  ([]
+   (proxy [MessageToMessageEncoder] []
+     (encode [ctx msg out]
+       (.add out (str msg "\r\n"))))))
 
 (defmulti ->byte-order class)
 

@@ -112,7 +112,7 @@
       (.childAttr bs (AttributeKey/valueOf (name k)) v))
     (when-let [group (:child-group config)]
       (.childGroup bs group))
-    (.childHjandler bs (:handler config))
+    (.childHandler bs (:handler config))
     (.validate bs)))
 
 (s/defn ^Bootstrap bootstrap :- Bootstrap
