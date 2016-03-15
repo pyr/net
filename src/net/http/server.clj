@@ -114,7 +114,7 @@
 
 (def ^:dynamic *request-ctx* nil)
 
-(defn stream-body
+(defn content-stream
   []
   (let [ctx         *request-ctx*]
     (reify ContentStream
