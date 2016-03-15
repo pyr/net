@@ -20,13 +20,21 @@
            io.netty.handler.codec.http.HttpMethod
            io.netty.handler.codec.http.HttpHeaders
            io.netty.handler.codec.http.HttpResponseStatus
-           io.netty.handler.codec.http.DefaultFullHttpResponse
+           io.netty.handler.codec.http.DefaultHttpResponse
+           io.netty.handler.codec.http.DefaultHttpContent
+           io.netty.handler.codec.http.HttpContent
+           io.netty.handler.codec.http.LastHttpContent
            io.netty.handler.codec.http.HttpVersion
            io.netty.handler.codec.http.HttpObjectAggregator
            io.netty.handler.codec.http.QueryStringDecoder
            io.netty.bootstrap.ServerBootstrap
            io.netty.buffer.Unpooled
+           io.netty.buffer.ByteBuf
            java.nio.charset.Charset))
+
+(defprotocol ContentStream
+  (stream [this chunk] [this chunk flush?])
+  (close! [this]))
 
 (defn epoll?
   "Find out if epoll is available on the underlying platform."
@@ -59,12 +67,10 @@
      [(-> k .toLowerCase keyword) v])))
 
 (defn data->response
-  "Create a netty full http response from a map."
-  [{:keys [status body headers]} version]
-  (let [resp (DefaultFullHttpResponse.
-               version
-               (HttpResponseStatus/valueOf (int status))
-               (Unpooled/wrappedBuffer (.getBytes body)))
+  [{:keys [status headers]} version]
+  (let [resp (DefaultHttpResponse.
+              version
+              (HttpResponseStatus/valueOf (int status)))
         hmap (.headers resp)]
     (doseq [[k v] headers]
       (.set hmap (name k) v))
@@ -83,6 +89,45 @@
   (when-let [content-type (:content-type headers)]
     (when (.startsWith content-type "application/x-www-form-urlencoded")
       (QueryStringDecoder. body false))))
+
+(defn byte-array?
+  [x]
+  (instance? (Class/forName "[B") x))
+
+(defn chunk->http-object
+  [chunk]
+  (cond
+    (string? chunk)
+    (DefaultHttpContent. (Unpooled/wrappedBuffer (.getBytes chunk)))
+
+    (byte-array? chunk)
+    (DefaultHttpContent. (Unpooled/wrappedBuffer chunk))
+
+    (instance? HttpContent chunk)
+    chunk
+
+    (instance? ByteBuf chunk)
+    (DefaultHttpContent. chunk)
+
+    :else
+    (throw (ex-info "cannot convert chunk to HttpContent" {}))))
+
+(def ^:dynamic *request-ctx* nil)
+
+(defn stream-body
+  []
+  (let [ctx         *request-ctx*]
+    (reify ContentStream
+      (stream [this chunk]
+        (stream this chunk true))
+      (stream [this chunk flush?]
+        (let [obj (chunk->http-object chunk)]
+          (if flush?
+            (.writeAndFlush ctx obj)
+            (.write ctx obj))))
+      (close! [this]
+        (-> (.writeAndFlush ctx LastHttpContent/EMPTY_LAST_CONTENT)
+            (.addListener ChannelFutureListener/CLOSE))))))
 
 (defn request-handler
   "Capture context and msg and yield a closure
@@ -105,9 +150,23 @@
                      :version        (-> msg .getProtocolVersion .text)
                      :headers        headers
                      :body           body}
-            resp (data->response (f req) (.getProtocolVersion msg))]
-        (-> (.writeAndFlush ctx resp)
-            (.addListener ChannelFutureListener/CLOSE)))
+            output  (binding [*request-ctx* ctx] (f req))
+            content (:body output)]
+        (.write ctx (data->response output (.getProtocolVersion msg)))
+        (cond
+          (nil? content)
+          nil
+
+          (string? content)
+          (-> (.writeAndFlush ctx (chunk->http-object content))
+              (.addListener ChannelFutureListener/CLOSE))
+
+          (satisfies? ContentStream content)
+          nil
+
+          :else
+          (throw (ex-info "cannot coerce provided content to HttpObject" {}))))
+
       (finally
         (.release msg)))))
 
@@ -160,7 +219,8 @@
                                      NioServerSocketChannel))
                          (.childHandler (initializer (:ring-handler options))))
              channel   (-> bootstrap
-                           (cond-> log-handler (.handler log-handler))
+                           (cond->
+                               log-handler (.handler log-handler))
                            (.bind ^String (or (:host options) "127.0.0.1")
                                   (int (or (:port options) 8080)))
                            (.sync)
