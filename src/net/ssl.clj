@@ -9,7 +9,8 @@
            java.security.spec.PKCS8EncodedKeySpec
            java.io.ByteArrayInputStream
            javax.xml.bind.DatatypeConverter
-           io.netty.handler.ssl.SslContextBuilder))
+           io.netty.handler.ssl.SslContextBuilder
+           io.netty.handler.ssl.ClientAuth))
 
 (defn ^X509Certificate s->cert
   [factory input]
@@ -24,6 +25,12 @@
   (let [bytes (DatatypeConverter/parseBase64Binary input)
         kspec (PKCS8EncodedKeySpec. bytes)]
     (.generatePrivate factory kspec)))
+
+(defn ->chain
+  [cert-spec]
+  (if (sequential? cert-spec)
+    (into-array X509Certificate (map s->cert cert-spec))
+    (into-array X509Certificate [(s->cert cert-spec)])))
 
 (defn netty-client-context
   "Build an SSL client context for netty"
@@ -47,4 +54,29 @@
               chain (.getCertificateChain keystore alias)]
           (.keyManager builder ^PrivateKey k (into-array X509Certificate (seq chain)))
           (.trustManager builder (into-array X509Certificate (seq chain))))))
+    (.build builder)))
+
+(defn netty-server-context
+  "Build an SSL client context for netty"
+  [{:keys [pkey password cert auth-mode ca-cert ciphers
+           cache-size session-timeout]}]
+  (let [certs    (->chain cert)
+        password (char-array password)
+        key-fact (KeyFactory/getInstance "RSA")
+        pkey     (s->pkey key-fact pkey)
+        builder  (SslContextBuilder/forServer pkey password certs)]
+    (when ciphers
+      (.ciphers ciphers))
+    (when ca-cert
+      (.trustManager builder (into-array X509Certificate (->chain ca-cert))))
+    (when cache-size
+      (.cacheSize (long cache-size)))
+    (when session-timeout
+      (.sessionTimeout (long session-timeout)))
+    (when auth-mode
+      (.clientAuth builder (case auth-mode
+                             :auth-mode-optional ClientAuth/OPTIONAL
+                             :auth-mode-require  ClientAuth/REQUIRE
+                             :auth-mode-none     ClientAuth/NONE
+                             (throw (ex-info "invalid client auth mode" {})))))
     (.build builder)))
