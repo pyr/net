@@ -32,7 +32,7 @@
     (into-array X509Certificate (map s->cert cert-spec))
     (into-array X509Certificate [(s->cert cert-spec)])))
 
-(defn netty-client-context
+(defn client-context
   "Build an SSL client context for netty"
   [{:keys [bundle password cert pkey authority]}]
   (let [builder (SslContextBuilder/forClient)]
@@ -56,7 +56,7 @@
           (.trustManager builder (into-array X509Certificate (seq chain))))))
     (.build builder)))
 
-(defn netty-server-context
+(defn server-context
   "Build an SSL client context for netty"
   [{:keys [pkey password cert auth-mode ca-cert ciphers
            cache-size session-timeout]}]

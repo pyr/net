@@ -198,7 +198,7 @@
          boss-group   (if use-epoll?
                         (EpollEventLoopGroup. thread-count)
                         (NioEventLoopGroup.   thread-count))
-         ctx          (ssl/netty-client-context (:ssl options))]
+         ctx          (ssl/client-context (:ssl options))]
      {:group   boss-group
       :ssl-ctx ctx
       :channel (if use-epoll? EpollSocketChannel NioSocketChannel)})))
