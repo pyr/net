@@ -23,7 +23,8 @@
           (doseq [dst channel-group :when (not= dst src)]
             (channel/write-and-flush! dst msg)))))))
 
-(def pipeline
+(defn pipeline
+  []
   (let [group   (channel/channel-group "clients")
         ->path  #(str "/home/pyr/.ssh/certs/" %)
         ssl-ctx (ssl/server-context
@@ -40,14 +41,14 @@
      (pipeline/read-timeout-handler 60)
      (pipeline/make-handler-adapter (chat-adapter group))]))
 
-(def bootstrap
+(defn bootstrap
   {:child-options {:so-keepalive           true
 ;;                   :so-backlog             128
                    :connect-timeout-millis 1000}
-   :handler       (pipeline/channel-initializer pipeline)})
+   :handler       (pipeline/channel-initializer (pipeline))})
 
 
 (comment
-  (def  server (bind! (bootstrap/server-bootstrap bootstrap) "localhost" 6379))
+  (def  server (bind! (bootstrap/server-bootstrap (bootstrap)) "localhost" 6379))
   (defn close []
     (-> server channel/channel channel/close! channel/sync-uninterruptibly!)))
