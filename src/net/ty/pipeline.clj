@@ -25,15 +25,19 @@
   (exception-caught [this ctx e])
   (is-sharable? [this]))
 
+(def ^:dynamic *channel* nil)
+
 (defn build-pipeline
-  [handlers]
-  (into-array ChannelHandler (for [h handlers] (if (fn? h) (h) h))))
+  [handlers chan]
+  (binding [*channel* chan]
+    (into-array ChannelHandler (for [h handlers] (if (fn? h) (h) h)))))
 
 (defn channel-initializer
   [pipeline]
   (proxy [ChannelInitializer] []
     (initChannel [^SocketChannel socket-channel]
-      (.addLast (.pipeline socket-channel) (build-pipeline pipeline)))))
+      (.addLast (.pipeline socket-channel)
+                (build-pipeline pipeline socket-channel)))))
 
 (defmulti ^TimeUnit unit->time-unit class)
 
