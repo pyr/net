@@ -136,11 +136,12 @@
 (defn ^ChannelHandler length-field-based-frame-decoder
   ([]
    (length-field-based-frame-decoder {}))
-  ([{:keys [byte-order offset length adjust strip fail-fast?]}]
+  ([{:keys [byte-order max offset length adjust strip fail-fast?]}]
    (let [bo  (->byte-order (or byte-order :big-endian))
          ff? (or (nil? fail-fast?) (boolean fail-fast?))]
      (fn []
        (LengthFieldBasedFrameDecoder. bo
+                                      (int (or max 16384))
                                       (int (or offset 0))
                                       (int (or length 4))
                                       (int (or adjust -4))
