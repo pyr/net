@@ -30,6 +30,8 @@
            io.netty.bootstrap.ServerBootstrap
            io.netty.buffer.Unpooled
            io.netty.buffer.ByteBuf
+           java.io.File
+           java.io.FileInputStream
            java.nio.charset.Charset))
 
 (defprotocol ContentStream
@@ -94,9 +96,19 @@
   [x]
   (instance? (Class/forName "[B") x))
 
+(defn file-chunk
+  [^File f]
+  (let [is  (FileInputStream. f)
+        len (.available is)]
+    (doto (Unpooled/buffer len len)
+      (.writeBytes is len))))
+
 (defn chunk->http-object
   [chunk]
   (cond
+    (instance? File chunk)
+    (DefaultHttpContent. (file-chunk chunk))
+
     (string? chunk)
     (DefaultHttpContent. (Unpooled/wrappedBuffer (.getBytes chunk)))
 
@@ -157,7 +169,7 @@
           (nil? content)
           nil
 
-          (string? content)
+          (or (instance? File content) (string? content))
           (-> (.writeAndFlush ctx (chunk->http-object content))
               (.addListener ChannelFutureListener/CLOSE))
 

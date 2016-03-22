@@ -42,6 +42,7 @@
      (pipeline/make-handler-adapter (chat-adapter group))]))
 
 (defn bootstrap
+  []
   {:child-options {:so-keepalive           true
 ;;                   :so-backlog             128
                    :connect-timeout-millis 1000}
