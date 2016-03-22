@@ -10,6 +10,7 @@
            java.security.spec.PKCS8EncodedKeySpec
            java.io.ByteArrayInputStream
            javax.xml.bind.DatatypeConverter
+           io.netty.channel.ChannelHandler
            io.netty.handler.ssl.SslContext
            io.netty.handler.ssl.SslContextBuilder
            io.netty.handler.ssl.ClientAuth))
@@ -122,10 +123,10 @@
                                (throw (ex-info "invalid client auth mode" {})))))
       (.build builder))))
 
-(defn handler-fn
+(defn ^clojure.lang.IFn handler-fn
   ([^SslContext ctx host port]
-   (fn []
+   (fn ^ChannelHandler make-handler []
      (.newHandler ctx (.alloc *channel*) host port)))
   ([^SslContext ctx]
-   (fn []
+   (fn ^ChannelHandler make-handler []
      (.newHandler ctx (.alloc *channel*)))))

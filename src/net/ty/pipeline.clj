@@ -144,7 +144,7 @@
                                       (int (or max 16384))
                                       (int (or offset 0))
                                       (int (or length 4))
-                                      (int (or adjust -4))
+                                      (int (or adjust 0))
                                       (int (or strip 4))
                                       ff?)))))
 
