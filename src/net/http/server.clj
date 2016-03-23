@@ -99,9 +99,12 @@
 
 (defn input-stream-chunk
   [^InputStream is]
-  (let [len (.available is)]
-    (doto (Unpooled/buffer len len)
-      (.writeBytes is len))))
+  (let [buf (Unpooled/buffer (.available is))]
+    (loop [len (.available is)]
+      (when (pos? len)
+        (.writeBytes buf is len)
+        (recur (.available is))))
+    buf))
 
 (defn file-chunk
   [^File f]
