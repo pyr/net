@@ -113,6 +113,8 @@
 (defn ^ChannelHandler line-frame-encoder
   ([]
    (proxy [MessageToMessageEncoder] []
+     (isSharable []
+       true)
      (encode [ctx msg out]
        (.add out (str msg "\r\n"))))))
 
@@ -204,12 +206,12 @@
 
 (defmacro with-input
   [[ctx input] & body]
-  `(reify HandlerAdapter
-     (channel-read [this# ~ctx ~input]
+  `(proxy [ChannelInboundHandlerAdapter] []
+     (channelRead [^ChannelHandlerContext ~ctx ~input]
        (do ~@body))
-     (channel-read-complete [this# ~ctx]
+     (channelReadComplete [^ChannelHandlerContext ~ctx]
        (.flush ~ctx))
-     (exception-caught [this# ~ctx e#]
+     (exceptionCaught [^ChannelHandlerContext ~ctx ^Throwable e#]
        (proxy-super exceptionCaught ~ctx e#))
-     (is-sharable? [this#]
+     (isSharable []
        true)))
