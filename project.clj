@@ -1,7 +1,7 @@
-(defproject spootnik/net "0.2.14"
+(defproject spootnik/net "0.2.15"
   :description "the clojure netty companion"
   :url "https://github.com/pyr/net"
   :license {:name "MIT License"}
   :dependencies [[org.clojure/clojure "1.8.0"]
-                 [io.netty/netty-all  "4.0.35.Final"]
+                 [io.netty/netty-all  "4.0.36.Final"]
                  [prismatic/schema    "1.0.5"]])
