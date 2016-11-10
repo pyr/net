@@ -15,6 +15,14 @@ Pending documentation, here is what you can find in net today:
 - HTTP(S) client
 - Simple interface to create TCP server with optional SSL support
 
+## Changelog
+
+### 0.2.17
+
+- `core.spec` schemas instead of prismatic schema
+- Rely on Netty 4.1.6
+- Additional sugar for futures and channels
+
 ## License
 
 Copyright © 2015, 2016 Pierre-Yves Ritschard, MIT License.
