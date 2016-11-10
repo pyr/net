@@ -15,6 +15,12 @@ Pending documentation, here is what you can find in net today:
 - HTTP(S) client
 - Simple interface to create TCP server with optional SSL support
 
+## Installation
+
+```clojure
+    [[spootnik/net "0.2.17"]]
+```
+
 ## Changelog
 
 ### 0.2.17
