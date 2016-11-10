@@ -2,6 +2,5 @@
   :description "the clojure netty companion"
   :url "https://github.com/pyr/net"
   :license {:name "MIT License"}
-  :dependencies [[org.clojure/clojure "1.8.0"]
-                 [io.netty/netty-all  "4.0.36.Final"]
-                 [prismatic/schema    "1.0.5"]])
+  :dependencies [[org.clojure/clojure "1.9.0-alpha14"]
+                 [io.netty/netty-all  "4.1.6.Final"]])

@@ -20,9 +20,14 @@
 (defprotocol HandlerAdapter
   (capabilities [this])
   (channel-active [this ctx])
+  (channel-inactive [this ctx])
+  (channel-registered [this ctx])
+  (channel-unregistered [this ctx])
   (channel-read [this ctx input])
   (channel-read-complete [this ctx])
   (exception-caught [this ctx e])
+  (channel-writability-changed [this ctx])
+  (user-event-triggered [this ctx event])
   (is-sharable? [this]))
 
 (def ^:dynamic *channel* nil)
@@ -181,14 +186,29 @@
       (channelActive [^ChannelHandlerContext ctx]
         (when (support? :channel-active)
           (channel-active adapter ctx)))
+      (channelInactive [^ChannelHandlerContext ctx]
+        (when (support? :channel-inactive)
+          (channel-inactive adapter ctx)))
       (channelRead [^ChannelHandlerContext ctx input]
         (channel-read adapter ctx input))
       (channelReadComplete [^ChannelHandlerContext ctx]
         (when (support? :channel-read-complete)
           (channel-read-complete adapter ctx)))
+      (channelRegistered [^ChannelHandlerContext ctx]
+        (when (support? :channel-registered)
+          (channel-registered adapter ctx)))
+      (channelUnregistered [^ChannelHandlerContext ctx]
+        (when (support? :channel-unregistered)
+          (channel-unregistered adapter ctx)))
       (exceptionCaught [^ChannelHandlerContext ctx ^Throwable e]
         (when (support? :exception-caught)
           (exception-caught adapter ctx e)))
+      (channelWritabilityChanged [^ChannelHandlerContext ctx]
+        (when (support? :channel-writability-changed)
+          (channel-writability-changed adapter ctx)))
+      (userEventTriggered [^ChannelHandlerContext ctx event]
+        (when (support? :user-event-triggered)
+          (user-event-triggered adapter ctx event)))
       (isSharable []
         (is-sharable? adapter)))))
 

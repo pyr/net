@@ -1,6 +1,7 @@
 (ns net.ty.channel
   (:refer-clojure :exclude [await])
   (:import io.netty.channel.ChannelFuture
+           io.netty.channel.ChannelFutureListener
            io.netty.channel.Channel
            io.netty.channel.group.ChannelGroup
            io.netty.channel.group.DefaultChannelGroup

@@ -1,5 +1,5 @@
 (ns net.ty.bootstrap
-  (:require [schema.core :as s])
+  (:require [clojure.spec :as s])
   (:import java.net.InetAddress
            java.net.NetworkInterface
            java.net.SocketAddress
@@ -15,34 +15,78 @@
            io.netty.channel.nio.NioEventLoopGroup
            io.netty.channel.socket.nio.NioServerSocketChannel
            io.netty.channel.socket.nio.NioSocketChannel
-           io.netty.channel.socket.nio.NioDatagramChannel
-           ))
+           io.netty.channel.socket.nio.NioDatagramChannel))
 
-(def channel-option-schema
-  {(s/optional-key :allocator)                    ByteBufAllocator
-   (s/optional-key :allow-half-closure)           s/Bool
-   (s/optional-key :auto-read)                    s/Bool
-   (s/optional-key :connect-timeout-millis)       s/Num
-   (s/optional-key :ip-multicast-addr)            InetAddress
-   (s/optional-key :ip-multicast-if)              NetworkInterface
-   (s/optional-key :ip-multicast-loop-disabled)   s/Bool
-   (s/optional-key :ip-multicast-ttl)             s/Num
-   (s/optional-key :ip-tos)                       s/Num
-   (s/optional-key :max-messages-per-read)        s/Num
-   (s/optional-key :message-size-estimator)       MessageSizeEstimator
-   (s/optional-key :rcvbuf-allocator)             RecvByteBufAllocator
-   (s/optional-key :so-backlog)                   s/Num
-   (s/optional-key :so-broadcast)                 s/Bool
-   (s/optional-key :so-keepalive)                 s/Bool
-   (s/optional-key :so-linger)                    s/Num
-   (s/optional-key :so-rcvbuf)                    s/Num
-   (s/optional-key :so-reuseaddr)                 s/Bool
-   (s/optional-key :so-sndbuf)                    s/Num
-   (s/optional-key :so-timeout)                   s/Num
-   (s/optional-key :tcp-nodelay)                  s/Bool
-   (s/optional-key :write-buffer-high-water-mark) s/Num
-   (s/optional-key :write-buffer-low-water-mark)  s/Num
-   (s/optional-key :write-spin-count)             s/Num})
+(s/def ::allocator ByteBufAllocator)
+(s/def ::allow-half-closure boolean?)
+(s/def ::auto-read boolean?)
+(s/def ::connect-timeout-millis int?)
+(s/def ::ip-multicast-addr InetAddress)
+(s/def ::ip-multicast-if NetworkInterface)
+(s/def ::ip-multicast-loop-disabled boolean?)
+(s/def ::ip-multicast-ttl int?)
+(s/def ::ip-tos int?)
+(s/def ::max-messages-per-read int?)
+(s/def ::message-size-estimator MessageSizeEstimator)
+(s/def ::rcvbuf-allocator RecvByteBufAllocator)
+(s/def ::so-backlog int?)
+(s/def ::so-broadcast boolean?)
+(s/def ::so-keepalive boolean?)
+(s/def ::so-linger int?)
+(s/def ::so-rcvbuf int?)
+(s/def ::so-reuseaddr boolean?)
+(s/def ::so-sndbuf int?)
+(s/def ::so-timeout int?)
+(s/def ::tcp-nodelay boolean?)
+(s/def ::write-buffer-high-water-mark int?)
+(s/def ::write-buffer-low-water-mark int?)
+(s/def ::write-sping-count int?)
+
+(s/def ::channel-option-schema
+  (s/keys :opt-un [::allocator
+                   ::allow-half-closure
+                   ::auto-read
+                   ::connect-timeout-millis
+                   ::ip-multicast-addr
+                   ::ip-multicast-if
+                   ::ip-multicast-loop-disabled
+                   ::ip-multicast-ttl
+                   ::ip-tos
+                   ::max-messages-per-read
+                   ::message-size-estimator
+                   ::rcvbuf-allocator
+                   ::so-backlog
+                   ::so-broadcast
+                   ::so-keepalive
+                   ::so-linger
+                   ::so-rcvbuf
+                   ::so-reuseaddr
+                   ::so-sndbuf
+                   ::so-timeout
+                   ::tcp-nodelay
+                   ::write-buffer-high-water-mark
+                   ::write-buffer-low-water-mark
+                   ::write-spin-count]))
+
+(s/def ::group (partial instance? EventLoopGroup))
+(s/def ::handler any?)
+(s/def ::options ::channel-option-schema)
+(s/def ::child-options ::channel-option-schema)
+(s/def ::child-attrs (s/map-of keyword? any?))
+(s/def ::child-group (partial instance? EventLoopGroup))
+(s/def ::channel any?)
+(s/def ::remote-address (s/cat ::host string? ::port int?))
+(s/def ::server-bootstrap (partial instance? ServerBootstrap))
+(s/def ::bootstrap (partial instance? Bootstrap))
+
+(s/def ::server-bootstrap-schema
+  (s/keys :req-un [::group ::handler]
+          :opt-un [::options ::child-options ::child-attrs
+                   ::child-group ::channel]))
+
+(s/def ::bootstrap-schema
+  (s/keys :req-un [::handler]
+          :opt-un [::group ::options ::attrs ::channel ::remote-address]))
 
 (def channel-options
   {:allocator                    ChannelOption/ALLOCATOR
@@ -75,21 +119,6 @@
   (or (channel-options k)
       (throw (ex-info (str "invalid channel option: " (name k)) {}))))
 
-(def server-bootstrap-schema
-  {(s/optional-key :options)       channel-option-schema
-   (s/optional-key :child-options) channel-option-schema
-   (s/optional-key :child-attrs)   {s/Keyword s/Any}
-   (s/optional-key :child-group)   EventLoopGroup
-   (s/optional-key :channel)       java.lang.Class
-   :group                          EventLoopGroup
-   :handler                        ChannelHandler})
-
-(def bootstrap-schema
-  {(s/optional-key :options) channel-option-schema
-   (s/optional-key :attrs)   {s/Keyword s/Any}
-   (s/optional-key :channel) java.lang.Class
-   :group                    EventLoopGroup
-   :handler                  ChannelHandler})
 
 (def nio-server-socket-channel NioServerSocketChannel)
 (def nio-socket-channel        NioSocketChannel)
@@ -99,8 +128,10 @@
   []
   (NioEventLoopGroup.))
 
-(s/defn ^ServerBoostrap server-bootstrap :- ServerBootstrap
-  [config :- server-bootstrap-schema]
+(defn ^ServerBootstrap server-bootstrap
+  [config]
+  (when-not (s/valid? ::server-bootstrap-schema config)
+    (throw (IllegalArgumentException. "invalid server bootstrap configuration")))
   (let [bs (ServerBootstrap.)]
     (.group   bs (or (:group config) (nio-event-loop-group)))
     (.channel bs (or (:channel config) nio-server-socket-channel))
@@ -115,8 +146,11 @@
     (.childHandler bs (:handler config))
     (.validate bs)))
 
-(s/defn ^Bootstrap bootstrap :- Bootstrap
-  [config :- bootstrap-schema]
+(defn ^Bootstrap bootstrap
+  [config]
+  (when-not (s/valid? ::bootstrap-schema config)
+    (println (s/explain-out (s/explain-data ::bootstrap-schema config)))
+    (throw (IllegalArgumentException. "invalid bootstrap configuration")))
   (let [bs (Bootstrap.)]
     (.group bs (or (:group config) (nio-event-loop-group)))
     (.channel bs (or (:channel config) nio-socket-channel))
@@ -124,6 +158,8 @@
       (.option bs copt (if (number? v) (int v) v)))
     (doseq [[k v] (:attrs config)]
       (.attr bs (AttributeKey/valueOf (name k)) v))
+    (when-let [[host port] (:remote-address config)]
+      (.remoteAddress bs host (int port)))
     (.handler bs (:handler config))
     (.validate bs)))
 
@@ -150,3 +186,23 @@
    (.localAddress bs x))
   ([bs x y]
    (.localAddress bs x y)))
+
+(defn validate!
+  ([bs]
+   (.validate bs)))
+
+(s/fdef ->channel-option
+        :args (s/cat :k keyword?)
+        :ret  (partial instance? ChannelOption))
+
+(s/fdef nio-event-loop-group
+        :args (s/cat)
+        :ret  (partial instance? NioEventLoopGroup))
+
+(s/fdef server-bootstrap
+        :args (s/cat :config ::server-bootstrap-schema)
+        :ret  ::server-bootstrap)
+
+(s/fdef bootstrap
+        :args (s/cat :config ::server-bootstrap-schema)
+        :ret  ::bootstrap)
