@@ -123,6 +123,26 @@
      (encode [ctx msg out]
        (.add out (str msg "\r\n"))))))
 
+(defmacro defencoder
+  [sym [sym ctx] & body]
+  `(defn ^ChannelHandler ~sym
+     []
+     (proxy [MessageToMessageEncoder] []
+       (isSharable []
+         true)
+       (encode [~ctx ~msg out#]
+         (.add out# (do ~@body))))))
+
+(defmacro defdecoder
+  [sym [sym ctx] & body]
+  `(defn ^ChannelHandler ~sym
+     []
+     (proxy [MessageToMessageDecoder] []
+       (isSharable []
+         true)
+       (decode [~ctx ~msg in#]
+         (.add out# (do ~@body))))))
+
 (defmulti ->byte-order class)
 
 (defmethod ->byte-order clojure.lang.Keyword
