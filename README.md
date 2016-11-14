@@ -23,6 +23,10 @@ Pending documentation, here is what you can find in net today:
 
 ## Changelog
 
+### 0.2.18
+
+- Convenience macros to create encoders and decoders.
+
 ### 0.2.17
 
 - `core.spec` schemas instead of prismatic schema
