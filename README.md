@@ -18,7 +18,7 @@ Pending documentation, here is what you can find in net today:
 ## Installation
 
 ```clojure
-    [[spootnik/net "0.2.17"]]
+    [[spootnik/net "0.2.18"]]
 ```
 
 ## Changelog
