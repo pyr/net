@@ -124,7 +124,7 @@
        (.add out (str msg "\r\n"))))))
 
 (defmacro defencoder
-  [sym [sym ctx] & body]
+  [sym [msg ctx] & body]
   `(defn ^ChannelHandler ~sym
      []
      (proxy [MessageToMessageEncoder] []
@@ -134,7 +134,7 @@
          (.add out# (do ~@body))))))
 
 (defmacro defdecoder
-  [sym [sym ctx] & body]
+  [sym [msg ctx] & body]
   `(defn ^ChannelHandler ~sym
      []
      (proxy [MessageToMessageDecoder] []
