@@ -20,7 +20,7 @@
 (s/def ::allocator (partial instance? ByteBufAllocator))
 (s/def ::allow-half-closure boolean?)
 (s/def ::auto-read boolean?)
-(s/def ::connect-timeout-millis int?)
+(s/def ::connect-timeout-millis pos-int?)
 (s/def ::ip-multicast-addr (partial instance? InetAddress))
 (s/def ::ip-multicast-if (partial instance? NetworkInterface))
 (s/def ::ip-multicast-loop-disabled boolean?)

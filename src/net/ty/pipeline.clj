@@ -127,7 +127,7 @@
   [sym [msg ctx] & body]
   `(defn ^ChannelHandler ~sym
      []
-     (proxy [MessageToMessageEncoder] []
+     (proxy [io.netty.handler.codec.MessageToMessageEncoder] []
        (isSharable []
          true)
        (encode [~ctx ~msg out#]
@@ -137,10 +137,10 @@
   [sym [msg ctx] & body]
   `(defn ^ChannelHandler ~sym
      []
-     (proxy [MessageToMessageDecoder] []
+     (proxy [io.netty.handler.codec.MessageToMessageDecoder] []
        (isSharable []
          true)
-       (decode [~ctx ~msg in#]
+       (decode [~ctx ~msg out#]
          (.add out# (do ~@body))))))
 
 (defmulti ->byte-order class)
