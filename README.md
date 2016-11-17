@@ -18,10 +18,15 @@ Pending documentation, here is what you can find in net today:
 ## Installation
 
 ```clojure
-    [[spootnik/net "0.2.18"]]
+    [[spootnik/net "0.2.19"]]
 ```
 
 ## Changelog
+
+### 0.2.19
+
+- Bugfix release for 0.2.18
+- More restrictive specs
 
 ### 0.2.18
 
