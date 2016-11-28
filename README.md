@@ -18,10 +18,14 @@ Pending documentation, here is what you can find in net today:
 ## Installation
 
 ```clojure
-    [[spootnik/net "0.2.19"]]
+    [[spootnik/net "0.2.20"]]
 ```
 
 ## Changelog
+
+### 0.2.20
+
+- Allow user-supplied max body size
 
 ### 0.2.19
 
