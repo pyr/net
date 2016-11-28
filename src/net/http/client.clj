@@ -89,15 +89,17 @@
 
 (defn request-initializer
   "Our channel initializer."
-  [ssl-ctx handler]
-  (proxy [ChannelInitializer] []
-    (initChannel [channel]
-      (let [pipeline (.pipeline channel)]
-        (when ssl-ctx
-          (.addLast pipeline "ssl" (ssl-ctx-handler ssl-ctx channel)))
-        (.addLast pipeline "codec"      (HttpClientCodec.))
-        (.addLast pipeline "aggregator" (HttpObjectAggregator. 1048576))
-        (.addLast pipeline "handler"    (netty-handler handler))))))
+  ([ssl-ctx handler]
+   (request-initializer ssl-ctx handler 1048576))
+  ([ssl-ctx handler max-body-size]
+   (proxy [ChannelInitializer] []
+     (initChannel [channel]
+       (let [pipeline (.pipeline channel)]
+         (when ssl-ctx
+           (.addLast pipeline "ssl" (ssl-ctx-handler ssl-ctx channel)))
+         (.addLast pipeline "codec"      (HttpClientCodec.))
+         (.addLast pipeline "aggregator" (HttpObjectAggregator. (int max-body-size)))
+         (.addLast pipeline "handler"    (netty-handler handler)))))))
 
 (def log-levels
   {:debug LogLevel/DEBUG
@@ -206,7 +208,7 @@
 (defn async-request
   ([request-map handler]
    (async-request (build-client {}) request-map handler))
-  ([{:keys [group channel ssl-ctx]} request-map handler]
+  ([{:keys [group channel ssl-ctx max-size]} request-map handler]
    (when-not (:uri request-map)
      (throw (ex-info "malformed request-map, needs :uri key" {})))
    (let [uri    (URI. (:uri request-map))
@@ -219,7 +221,9 @@
          bs     (doto (Bootstrap.)
                   (.group   group)
                   (.channel channel)
-                  (.handler (request-initializer (when ssl? ssl-ctx) handler)))
+                  (.handler (request-initializer (when ssl? ssl-ctx)
+                                                 handler
+                                                 (or max-size (* 1024 1024 10)))))
          ch     (some-> bs (.connect host (int port)) .sync .channel)]
      (.writeAndFlush ch (data->request (assoc request-map :uri uri)))
      (-> ch .closeFuture .sync))))
