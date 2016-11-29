@@ -124,22 +124,24 @@
        (.add out (str msg "\r\n"))))))
 
 (defmacro defencoder
-  [sym [msg ctx] & body]
+  [sym [msg ctx shareable?] & body]
   `(defn ^ChannelHandler ~sym
      []
      (proxy [io.netty.handler.codec.MessageToMessageEncoder] []
        (isSharable []
-         true)
+         (or (nil? ~shareable?)
+             (boolean ~shareable?)))
        (encode [~ctx ~msg out#]
          (.add out# (do ~@body))))))
 
 (defmacro defdecoder
-  [sym [msg ctx] & body]
+  [sym [msg ctx shareable?] & body]
   `(defn ^ChannelHandler ~sym
      []
      (proxy [io.netty.handler.codec.MessageToMessageDecoder] []
        (isSharable []
-         true)
+         (or (nil? ~shareable?)
+             (boolean ~shareable?)))
        (decode [~ctx ~msg out#]
          (.add out# (do ~@body))))))
 
