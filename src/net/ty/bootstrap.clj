@@ -212,7 +212,7 @@
     (shutdown-gracefully! group)))
 
 (defn set-child-handler!
-  [boostrap handler]
+  [bootstrap handler]
   (.childHandler bootstrap handler))
 
 (s/fdef ->channel-option

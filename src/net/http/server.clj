@@ -87,7 +87,8 @@
 
 (defn data->response
   [{:keys [status headers]} version]
-  (let [resp (int->status status)
+  (let [code (int->status status)
+        resp (DefaultHttpResponse. version code)
         hmap (.headers resp)]
     (doseq [[k v] headers]
       (.set hmap (name k) v))
@@ -132,8 +133,7 @@
       (instance? ByteBuffer x)
       (instance? File x)
       (instance? HttpContent x)
-      (instance? InputStream x)
-      (instance? Channel x)))
+      (instance? InputStream x)))
 
 (defn chunk->http-object
   [chunk]
