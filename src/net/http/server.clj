@@ -177,49 +177,6 @@
      :version        (-> msg .getProtocolVersion .text)
      :headers        headers}))
 
-(defn request-handler
-  "Capture context and msg and yield a closure
-   which generates a response.
-
-   The closure may be called at once or submitted to a pool."
-  [f ^ChannelHandlerContext ctx ^FullHttpRequest msg]
-  (fn []
-    (try
-      (let [body    (bb->string (.content msg))
-            bparams (some-> msg (body-params headers body) ->params)
-            req     (-> (->request msg)
-                        (assoc :body-params bparams)
-                        (update :params merge bparams))
-            output  (binding [*request-ctx* ctx] (f req))
-            content (:body output)]
-        (.write ctx (data->response output (.getProtocolVersion msg)))
-        (cond
-          (nil? content)
-          nil
-
-          (content-chunk? content)
-          (-> (chan/write-and-flush! ctx (chunk->http-object content))
-              (f/add-close-listener))
-
-          :else
-          (do
-            (error "cannot coerce provided content to HttpObject")
-            (throw (ex-info "cannot coerce provided content to HttpObject" {})))))
-
-      (finally
-        (.release msg)))))
-
-(defn netty-handler
-  "Simple netty-handler, everything may happen in
-   channel read, since we're expecting a full http request."
-  [f]
-  (proxy [ChannelInboundHandlerAdapter] []
-    (exceptionCaught [^ChannelHandlerContext ctx e]
-      (f {:request-method :error :error e}))
-    (channelRead [^ChannelHandlerContext ctx ^FullHttpRequest msg]
-      (let [callback (request-handler f ctx msg)]
-        (callback)))))
-
 (def last-http-content
   ""
   LastHttpContent/EMPTY_LAST_CONTENT)
@@ -245,9 +202,9 @@
       (instance? Channel body)
       (f/operation-complete listener))))
 
-(defn chunked-netty-handler
+(defn netty-handler
   ([handler]
-   (chunked-netty-handler handler 10))
+   (netty-handler handler 10))
   ([handler inbuf]
    (let [body  (a/chan inbuf)
          state (volatile! :init)]
@@ -275,18 +232,7 @@
            :else
            (a/put! body msg)))))))
 
-(defn initializer
-  "Our channel initializer."
-  [{:keys [max-body ring-handler]
-    :or   {max-body (* 16 1024 1024)}}]
-  (proxy [ChannelInitializer] []
-    (initChannel [channel]
-      (let [pipeline (.pipeline channel)]
-        (.addLast pipeline "codec"      (HttpServerCodec.)
-        (.addLast pipeline "aggregator" (HttpObjectAggregator. (int max-body)))
-        (.addLast pipeline "handler"    (netty-handler ring-handler)))))))
-
-(defn chunked-decoder
+(defn body-decoder
   [max-size]
   (let [content (buf/buffer-holder)]
     (proxy [io.netty.handler.codec.MessageToMessageDecoder] []
@@ -307,13 +253,13 @@
               (.add out chunk)))
           (finally))))))
 
-(defn chunked-initializer
+(defn initializer
   [{:keys [chunk-size inbuf ring-handler]
     :or   {chunk-size default-chunk-size
            inbuf      default-inbuf}}]
   (let [codec      (HttpServerCodec. 4096 8192 (int chunk-size))
-        aggregator (chunked-decoder chunk-size)
-        handler    (chunked-netty-handler ring-handler inbuf)]
+        aggregator (body-decoder chunk-size)
+        handler    (netty-handler ring-handler inbuf)]
     (proxy [ChannelInitializer] []
       (initChannel [channel]
         (let [pipeline (.pipeline channel)]
@@ -351,13 +297,13 @@
   [(or host "127.0.0.1") (or port 8080)])
 
 (defn run-server
-  "Prepare a bootstrap channel and start it."
+  "A server handler which for which the body consists of a list of
+  chunks"
   ([options handler]
    (run-server (assoc options :ring-handler handler)))
   ([options]
-   (let [thread-count (or (:loop-thread-count options) 1)
-         boss-group   (make-boss-group options)
-         [host port]  (get-host-port options)]
+   (let [boss-group  (make-boss-group options)
+         [host port] (get-host-port options)]
      (try
        (let [bootstrap (doto (ServerBootstrap.)
                          (set-so-backlog! options)
@@ -372,29 +318,7 @@
          (future (-> channel (chan/close-future) (f/sync!)))
          (bs/shutdown-fn channel boss-group))))))
 
-(defn run-chunked-server
-  "A server handler which for which the body consists of a list of
-  chunks"
-  ([options handler]
-   (run-chunked-server (assoc options :ring-handler handler)))
-  ([options]
-   (let [boss-group  (make-boss-group options)
-         [host port] (get-host-port options)]
-     (try
-       (let [bootstrap (doto (ServerBootstrap.)
-                         (set-so-backlog! options)
-                         (bs/set-group! boss-group)
-                         (set-optimal-channel!)
-                         (bs/set-child-handler! (chunked-initializer options)))
-             channel   (-> bootstrap
-                           (set-log-handler! options)
-                           (bs/bind! host port)
-                           (f/sync!)
-                           (chan/channel))]
-         (future (-> channel (chan/close-future) (f/sync!)))
-         (bs/shutdown-fn channel boss-group))))))
-
-(defn async-chunk-handler
+(defn async-handler
   [{:keys [headers] :as request}]
   (a/go
     (let [body (a/chan 10)
