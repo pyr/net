@@ -23,3 +23,35 @@
     (reify io.netty.channel.ChannelFutureListener
       (operationComplete [this# ~future]
         (do ~@body)))))
+
+(defn operation-complete
+  ([listener]
+   (.operationComplete listener nil))
+  ([listener future]
+   (.operationComplete listener future)))
+
+(defmacro deflistener
+  [sym [listener future bindings] & body]
+  `(defn ~sym
+     ~bindings
+     (reify
+       io.netty.channel.ChannelFutureListener
+       (operationComplete [~listener ~future]
+         (do ~@body)))))
+
+(defn sync!
+  [future]
+  (.sync future))
+
+
+(defn add-listener
+  [chan listener]
+  (.addListener chan listener))
+
+(def close-listener
+  ""
+  io.netty.channel.ChannelFutureListener/CLOSE)
+
+(defn add-close-listener
+  [chan]
+  (.addListener chan io.netty.channel.ChannelFutureListener/CLOSE))

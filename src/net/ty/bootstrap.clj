@@ -1,9 +1,11 @@
 (ns net.ty.bootstrap
-  (:require [clojure.spec :as s])
+  (:require [clojure.spec   :as s]
+            [net.ty.channel :as chan])
   (:import java.net.InetAddress
            java.net.NetworkInterface
            java.net.SocketAddress
            io.netty.util.AttributeKey
+           io.netty.bootstrap.AbstractBootstrap
            io.netty.bootstrap.ServerBootstrap
            io.netty.bootstrap.Bootstrap
            io.netty.buffer.ByteBufAllocator
@@ -163,6 +165,10 @@
     (.handler bs (:handler config))
     (.validate bs)))
 
+(defn sync!
+  [^AbstractBootstrap bs]
+  (.sync bs))
+
 (defn bind!
   [^ServerBootstrap bs ^String host ^Long port]
   (.bind bs host (int port)))
@@ -190,6 +196,24 @@
 (defn validate!
   ([bs]
    (.validate bs)))
+
+(defn set-group!
+  [bs group]
+  (.group bs group))
+
+(defn shutdown-gracefully!
+  [group]
+  (.shutdownGracefully group))
+
+(defn shutdown-fn
+  [chan group]
+  (fn []
+    (chan/close! chan)
+    (shutdown-gracefully! group)))
+
+(defn set-child-handler!
+  [boostrap handler]
+  (.childHandler bootstrap handler))
 
 (s/fdef ->channel-option
         :args (s/cat :k keyword?)

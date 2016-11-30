@@ -46,3 +46,7 @@
 (defn sync-uninterruptibly!
   [chan]
   (.syncUninterruptibly chan))
+
+(defn close-future
+  [chan]
+  (.closeFuture chan))

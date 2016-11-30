@@ -1,10 +1,11 @@
 (ns net.http.server
   "Small wrapper around netty for HTTP servers."
-  (:require [net.ty.buffer :as buf]
-            [net.ty.future :as f]
-            [net.ty.bootstrap :as bs]
-            [clojure.tools.logging :refer [debug info error]]
-            [clojure.core.async :as a])
+  (:require [net.ty.buffer         :as buf]
+            [net.ty.future         :as f]
+            [net.ty.bootstrap      :as bs]
+            [net.ty.channel        :as chan]
+            [clojure.core.async    :as a]
+            [clojure.tools.logging :refer [debug info error]])
   (:import io.netty.channel.ChannelHandlerContext
            io.netty.channel.ChannelHandlerAdapter
            io.netty.channel.ChannelInboundHandlerAdapter
@@ -46,15 +47,9 @@
            java.nio.ByteBuffer
            clojure.core.async.impl.protocols.Channel))
 
-(defprotocol ContentStream
-  (stream [this chunk] [this chunk flush?])
-  (close! [this]))
+(def default-chunk-size "" (* 16 1024 1024))
 
-(defprotocol ChunkedRequestHandler
-  (report-failure [this failure])
-  (request [this req])
-  (content [this chunk])
-  (last-content [this chunk]))
+(def default-inbuf "" 10)
 
 (defn epoll?
   "Find out if epoll is available on the underlying platform."
@@ -86,11 +81,13 @@
    (for [[^String k ^String v] (-> headers .entries seq)]
      [(-> k .toLowerCase keyword) v])))
 
+(defn int->status
+  [status]
+  (HttpResponseStatus/valueOf (int status)))
+
 (defn data->response
   [{:keys [status headers]} version]
-  (let [resp (DefaultHttpResponse.
-              version
-              (HttpResponseStatus/valueOf (int status)))
+  (let [resp (int->status status)
         hmap (.headers resp)]
     (doseq [[k v] headers]
       (.set hmap (name k) v))
@@ -168,21 +165,6 @@
 
 (def ^:dynamic *request-ctx* nil)
 
-(defn content-stream
-  []
-  (let [ctx         *request-ctx*]
-    (reify ContentStream
-      (stream [this chunk]
-        (stream this chunk true))
-      (stream [this chunk flush?]
-        (let [obj (chunk->http-object chunk)]
-          (if flush?
-            (.writeAndFlush ctx obj)
-            (.write ctx obj))))
-      (close! [this]
-        (-> (.writeAndFlush ctx LastHttpContent/EMPTY_LAST_CONTENT)
-            (.addListener ChannelFutureListener/CLOSE))))))
-
 (defn ->request
   [^HttpRequest msg]
   (let [dx      (QueryStringDecoder. (.getUri msg))
@@ -210,18 +192,14 @@
                         (update :params merge bparams))
             output  (binding [*request-ctx* ctx] (f req))
             content (:body output)]
-        (f/with-result [ftr (.write ctx (data->response output (.getProtocolVersion msg)))]
-          (println "successfully wrote data"))
+        (.write ctx (data->response output (.getProtocolVersion msg)))
         (cond
           (nil? content)
           nil
 
           (content-chunk? content)
-          (-> (.writeAndFlush ctx (chunk->http-object content))
-              (.addListener ChannelFutureListener/CLOSE))
-
-          (satisfies? ContentStream content)
-          nil
+          (-> (chan/write-and-flush! ctx (chunk->http-object content))
+              (f/add-close-listener))
 
           :else
           (do
@@ -242,33 +220,37 @@
       (let [callback (request-handler f ctx msg)]
         (callback)))))
 
+(def last-http-content
+  ""
+  LastHttpContent/EMPTY_LAST_CONTENT)
+
+(f/deflistener write-response-listener
+  [this future [^ChannelHandlerContext ctx ^Channel body]]
+  (if (or (nil? future) (f/complete? future))
+    (let [chunk (a/<!! body)
+          msg   (if chunk (chunk->http-object chunk) last-http-content)]
+      (-> (chan/write-and-flush! ctx msg)
+          (f/add-listener (if chunk this f/close-listener))))
+    (a/close! body)))
+
 (defn write-response
   [^ChannelHandlerContext ctx ^HttpVersion version {:keys [body] :as resp}]
   (.writeAndFlush ctx (data->response resp version))
-  (let [listener (reify io.netty.channel.ChannelFutureListener
-                   (operationComplete [this future]
-                     (let [chunk (a/<!! body)]
-                       (if chunk
-                         (.addListener (.writeAndFlush ctx (chunk->http-object chunk)) this)
-                         (.addListener (.writeAndFlush ctx LastHttpContent/EMPTY_LAST_CONTENT)
-                                       ChannelFutureListener/CLOSE)))))]
+  (let [listener (write-response-listener ctx body)]
     (cond
-      (satisfies? ContentStream body)
-      ::content-stream-handles-output
-
-      (content-chunk? content)
-      (-> (.writeAndFlush ctx (chunk->http-object content))
-          (.addListener ChannelFutureListener/CLOSE))
+      (content-chunk? body)
+      (-> (chan/write-and-flush! ctx (chunk->http-object body))
+          (f/add-close-listener))
 
       (instance? Channel body)
-      (a/go
-        (.operationComplete listener nil)))))
+      (f/operation-complete listener))))
 
 (defn chunked-netty-handler
   ([handler]
    (chunked-netty-handler handler 10))
   ([handler inbuf]
-   (let [body (a/chan inbuf)]
+   (let [body  (a/chan inbuf)
+         state (volatile! :init)]
      (proxy [ChannelInboundHandlerAdapter] []
        (exceptionCaught [^ChannelHandlerContext ctx e]
          (handler {:type           :error
@@ -295,13 +277,14 @@
 
 (defn initializer
   "Our channel initializer."
-  [handler]
+  [{:keys [max-body ring-handler]
+    :or   {max-body (* 16 1024 1024)}}]
   (proxy [ChannelInitializer] []
     (initChannel [channel]
       (let [pipeline (.pipeline channel)]
         (.addLast pipeline "codec"      (HttpServerCodec.)
-        (.addLast pipeline "aggregator" (HttpObjectAggregator. 1048576))
-        (.addLast pipeline "handler"    (netty-handler handler)))))))
+        (.addLast pipeline "aggregator" (HttpObjectAggregator. (int max-body)))
+        (.addLast pipeline "handler"    (netty-handler ring-handler)))))))
 
 (defn chunked-decoder
   [max-size]
@@ -325,56 +308,70 @@
           (finally))))))
 
 (defn chunked-initializer
-  [chunk-size inbuf handler]
-  (proxy [ChannelInitializer] []
-    (initChannel [channel]
-      (let [pipeline (.pipeline channel)]
-        (.addLast pipeline "codec" (HttpServerCodec. (int 4096)
-                                                     (int 8192)
-                                                     (int chunk-size)))
-        (.addLast pipeline "aggregator" (chunked-decoder chunk-size))
-        (.addLast pipeline "handler" (chunked-netty-handler handler inbuf))))))
+  [{:keys [chunk-size inbuf ring-handler]
+    :or   {chunk-size default-chunk-size
+           inbuf      default-inbuf}}]
+  (let [codec      (HttpServerCodec. 4096 8192 (int chunk-size))
+        aggregator (chunked-decoder chunk-size)
+        handler    (chunked-netty-handler ring-handler inbuf)]
+    (proxy [ChannelInitializer] []
+      (initChannel [channel]
+        (let [pipeline (.pipeline channel)]
+          (.addLast pipeline "codec"      codec)
+          (.addLast pipeline "aggregator" aggregator)
+          (.addLast pipeline "handler"    handler))))))
 
 (def log-levels
   {:debug LogLevel/DEBUG
    :info  LogLevel/INFO
    :warn  LogLevel/WARN})
 
-(defn optimal-channel
-  []
-  (if (epoll?) EpollServerSocketChannel NioServerSocketChannel))
+(defn set-optimal-channel!
+  [bs]
+  (.channel bs (if (epoll?) EpollServerSocketChannel NioServerSocketChannel)))
+
+(defn set-log-handler!
+  [bootstrap {:keys [logging]}]
+  (let [handler (when-let [level (some-> logging keyword (get log-levels))]
+                  (LoggingHandler. level))]
+    (cond-> bootstrap  handler (.handler handler))))
+
+(defn make-boss-group
+  [{:keys [loop-thread-count disable-epoll]}]
+  (if (and (epoll?) (not disable-epoll))
+    (EpollEventLoopGroup. (int (or loop-thread-count 1)))
+    (NioEventLoopGroup. (int (or loop-thread-count 1)))))
+
+(defn set-so-backlog!
+  [bootstrap {:keys [so-backlog]}]
+  (.option bootstrap ChannelOption/SO_BACKLOG (int (or so-backlog 1024))))
+
+(defn get-host-port
+  [{:keys [host port]}]
+  [(or host "127.0.0.1")
+   (or port 8080)])
 
 (defn run-server
   "Prepare a bootstrap channel and start it."
   ([options handler]
    (run-server (assoc options :ring-handler handler)))
   ([options]
-   (let [log-handler  (when-let [level (some-> (:logging options)
-                                               keyword
-                                               (get log-levels))]
-                        (LoggingHandler. level))
-         thread-count (or (:loop-thread-count options) 1)
-         boss-group   (if (and (epoll?) (not (:disable-epoll options)))
-                        (EpollEventLoopGroup. thread-count)
-                        (NioEventLoopGroup.   thread-count))
-         so-backlog   (int (or (:so-backlog options) 1024))]
+   (let [thread-count (or (:loop-thread-count options) 1)
+         boss-group   (make-boss-group options)
+         [host port]  (get-host-port options)]
      (try
        (let [bootstrap (doto (ServerBootstrap.)
-                         (.option ChannelOption/SO_BACKLOG so-backlog)
-                         (.group boss-group)
-                         (.channel (optimal-channel))
-                         (.childHandler (initializer (:ring-handler options))))
+                         (set-so-backlog! options)
+                         (bs/set-group! boss-group)
+                         (set-optimal-channel!)
+                         (bs/set-child-handler! (initializer options)))
              channel   (-> bootstrap
-                           (cond-> log-handler (.handler log-handler))
-                           (bs/bind! (or (:host options) "127.0.0.1")
-                                     (or (:port options) 8080))
-                           (.sync)
-                           (.channel))]
-         (future
-           (-> channel .closeFuture .sync))
-         (fn []
-           (.close channel)
-           (.shutdownGracefully boss-group)))))))
+                           (set-log-handler! options)
+                           (bs/bind! host port)
+                           (f/sync!)
+                           (chan/channel))]
+         (future (-> channel (chan/close-future) (f/sync!)))
+         (bs/shutdown-fn channel boss-group))))))
 
 (defn run-chunked-server
   "A server handler which for which the body consists of a list of
@@ -382,39 +379,24 @@
   ([options handler]
    (run-chunked-server (assoc options :ring-handler handler)))
   ([options]
-   (let [chunk-size   (or (:chunk-size options) (* 16 1024 1024))
-         log-handler  (when-let [level (some-> (:logging options)
-                                               keyword
-                                               (get log-levels))]
-                        (LoggingHandler. level))
-         thread-count (or (:loop-thread-count options) 1)
-         boss-group   (if (and (epoll?) (not (:disable-epoll options)))
-                        (EpollEventLoopGroup. thread-count)
-                        (NioEventLoopGroup.   thread-count))
-         so-backlog   (int (or (:so-backlog options) 1024))]
+   (let [boss-group  (make-boss-group options)
+         [host port] (get-host-port options)]
      (try
        (let [bootstrap (doto (ServerBootstrap.)
-                         (.option ChannelOption/SO_BACKLOG so-backlog)
-                         (.group boss-group)
-                         (.channel (optimal-channel))
-                         (.childHandler (chunked-initializer chunk-size
-                                                             (or (:inbuf options) 10)
-                                                             (:ring-handler options))))
+                         (set-so-backlog! options)
+                         (bs/set-group! boss-group)
+                         (set-optimal-channel!)
+                         (bs/set-child-handler! (chunked-initializer options)))
              channel   (-> bootstrap
-                           (cond-> log-handler (.handler log-handler))
-                           (bs/bind! (or (:host options) "127.0.0.1")
-                                     (or (:port options) 8080))
-                           (.sync)
-                           (.channel))]
-         (future
-           (-> channel .closeFuture .sync))
-         (fn []
-           (.close channel)
-           (.shutdownGracefully boss-group)))))))
+                           (set-log-handler! options)
+                           (bs/bind! host port)
+                           (f/sync!)
+                           (chan/channel))]
+         (future (-> channel (chan/close-future) (f/sync!)))
+         (bs/shutdown-fn channel boss-group))))))
 
 (defn async-chunk-handler
   [{:keys [headers] :as request}]
-  (debug (pr-str headers))
   (a/go
     (let [body (a/chan 10)
           type (:content-type headers "text/plain")]
