@@ -348,8 +348,7 @@
 
 (defn get-host-port
   [{:keys [host port]}]
-  [(or host "127.0.0.1")
-   (or port 8080)])
+  [(or host "127.0.0.1") (or port 8080)])
 
 (defn run-server
   "Prepare a bootstrap channel and start it."
