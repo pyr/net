@@ -5,6 +5,7 @@
             [net.ty.bootstrap      :as bs]
             [net.ty.channel        :as chan]
             [clojure.core.async    :as a]
+            [net.core.async        :refer [put!]]
             [clojure.tools.logging :refer [debug info error]])
   (:import io.netty.channel.ChannelHandlerContext
            io.netty.channel.ChannelHandlerAdapter
@@ -226,6 +227,16 @@
       (a/take! resp (partial write-response ctx version))
       (write-response ctx version resp))))
 
+(defn backpressure-fn
+  [ctx]
+  (fn [enable?]
+    (-> ctx chan/channel .config (.isAutoRead (not enable?)))))
+
+(defn close-fn
+  [ctx]
+  (fn []
+    (-> ctx chan/channel chan/close-future)))
+
 (defn netty-handler
   "This is a stateful, per HTTP session adapter which wraps the user
    supplied function.
@@ -240,7 +251,7 @@
      (proxy [ChannelInboundHandlerAdapter] []
        (exceptionCaught [^ChannelHandlerContext ctx e]
          (handler {:type           :error
-                   :request-method :error
+                   :request-method :errogr
                    :error          e
                    :ctx            ctx}))
        (channelRead [^ChannelHandlerContext ctx msg]
@@ -267,14 +278,14 @@
                  (update :request assoc-body-params)
                  (get-response handler ctx))
              (doto (get-in @state [:request :body])
-               (a/put! msg)
+               (put! msg (backpressure-fn ctx) (close-fn ctx))
                (a/close! msg)))
 
            :else
            (let [body (get-in @state [:request :body])]
              (if (:aggregate? @state)
                (buf/augment-buffer body msg)
-               (a/put! body msg)))))))))
+               (put! msg (backpressure-fn ctx) (close-fn ctx))))))))))
 
 (defn body-decoder
   [max-size]
