@@ -109,14 +109,15 @@
   [{:keys [headers body]}]
   (when-let [content-type (:content-type headers)]
     (when (.startsWith content-type "application/x-www-form-urlencoded")
-      (QueryStringDecoder. (bb->string body) false))))
+      (->params
+       (QueryStringDecoder. (bb->string body) false)))))
 
 (defn assoc-body-params
   [request]
   (let [bp (body-params request)]
     (cond-> request
-      bp (assoc request :body-params bp)
-      bp (update request :params merge bp))))
+      bp (assoc :body-params bp)
+      bp (update :params merge bp))))
 
 (defn byte-array?
   [x]
@@ -171,7 +172,7 @@
     (DefaultHttpContent. (Unpooled/wrappedBuffer chunk))
 
     :else
-    (throw (ex-info "cannot convert chunk to HttpContent" {}))))
+    (throw (IllegalArgumentException. "cannot convert chunk to HttpContent"))))
 
 (def ^:dynamic *request-ctx* nil)
 
@@ -223,13 +224,23 @@
 (defn get-response
   [{:keys [request version]} handler ctx]
   (let [resp (handler request)]
-    (if (instance? Channel resp)
+    (cond
+      (instance? Channel resp)
       (a/take! resp (partial write-response ctx version))
-      (write-response ctx version resp))))
+
+      (map? resp)
+      (future
+        (write-response ctx version resp))
+
+      :else
+      (do
+        (error "unhandled response body type" (pr-str resp))
+        (throw (IllegalArgumentException. "unhandled response body type"))))))
 
 (defn backpressure-fn
   [ctx]
   (fn [enable?]
+    (warn "switching backpressure mode to:" enable?)
     (-> ctx chan/channel .config (.isAutoRead (not enable?)))))
 
 (defn close-fn
@@ -250,8 +261,9 @@
          state      (volatile! {:aggregate? false})]
      (proxy [ChannelInboundHandlerAdapter] []
        (exceptionCaught [^ChannelHandlerContext ctx e]
+         (error e "exception caught!")
          (handler {:type           :error
-                   :request-method :errogr
+                   :request-method :error
                    :error          e
                    :ctx            ctx}))
        (channelRead [^ChannelHandlerContext ctx msg]
@@ -266,26 +278,34 @@
                  (do
                    (vswap! state assoc-in [:request :body] (a/chan inbuf))
                    (get-response @state handler ctx))
-                 (vswap! state
-                         #(-> (assoc % :aggregate? true)
-                              (assoc-in [:request :body]
-                                        (buf/new-buffer length length)))))))
+                 (do
+                   (vswap! state
+                           #(-> (assoc % :aggregate? true)
+                                (assoc-in [:request :body]
+                                          (buf/new-buffer length length))))))))
 
            (buf/last-http-content? msg)
-           (if (:aggregate? @state)
-             (-> @state
-                 (update-in [:request :body] buf/augment-buffer msg)
-                 (update :request assoc-body-params)
-                 (get-response handler ctx))
-             (doto (get-in @state [:request :body])
-               (put! msg (backpressure-fn ctx) (close-fn ctx))
-               (a/close! msg)))
+           (let [chunk (.content msg)]
+             (if (:aggregate? @state)
+               (-> @state
+                   (update-in [:request :body] buf/augment-buffer chunk)
+                   (update :request assoc-body-params)
+                   (get-response handler ctx))
+               (doto (get-in @state [:request :body])
+                 (put! chunk (backpressure-fn ctx) (close-fn ctx))
+                 (a/close!))))
+
+           (content-chunk? msg)
+           (let [body (get-in @state [:request :body])
+                 chunk (.content msg)]
+             (if (:aggregate? @state)
+               (buf/augment-buffer body chunk)
+               (put! chunk (backpressure-fn ctx) (close-fn ctx))))
 
            :else
-           (let [body (get-in @state [:request :body])]
-             (if (:aggregate? @state)
-               (buf/augment-buffer body msg)
-               (put! msg (backpressure-fn ctx) (close-fn ctx))))))))))
+           (do
+             (error "unhandled message chunk on body channel")
+             (throw (IllegalArgumentException. "unhandled message chunk on body channel")))))))))
 
 (defn body-decoder
   [max-size]
@@ -305,8 +325,7 @@
 
             :else
             (when-let [chunk (buf/update-content max-size content msg)]
-              (.add out chunk)))
-          (finally))))))
+              (.add out chunk))))))))
 
 (defn initializer
   [{:keys [chunk-size inbuf ring-handler]
@@ -373,13 +392,26 @@
          (future (-> channel (chan/close-future) (f/sync!)))
          (bs/shutdown-fn channel boss-group))))))
 
+(defn chunked?
+  [request]
+  (instance? Channel (:body request)))
+
 (defn async-handler
-  [{:keys [headers] :as request}]
-  (a/go
-    (let [body (a/chan 10)
-          type (:content-type headers "text/plain")]
-      (a/pipe (:body request) body)
+  [{:keys [headers body] :as request}]
+  (if (chunked? request)
+    (let [rbody (a/chan 100)
+          type  (:content-type headers "text/plain")]
+      (info "handler found chunked request")
+      (a/pipe body rbody)
       {:status  200
-       :headers {"Content-Type" type
-                 "Transfer-Encoding" "chunked"}
-       :body body})))
+       :headers {"Content-Type"         type
+                 "X-Content-Aggregated" "false"
+                 "Transfer-Encoding"    "chunked"}
+       :body    rbody})
+    (let [params (:body-params request)]
+      (info "handler found aggregated request")
+      {:status  200
+       :headers {"Content-Type"         "text/plain"
+                 "X-Content-Aggregated" "true"
+                 "Transfer-Encoding"    "chunked"}
+       :body    body})))

@@ -58,7 +58,9 @@
           buf-sz (if buf (.capacity buf) 0)]
       (cond
         (nil? buf)
-        [(DefaultLastHttpContent. (.content msg))]
+        (do
+          (.retain (.content msg))
+          [(DefaultLastHttpContent. (.content msg))])
 
         (<= 0 (+ msg-sz buf-sz) max-size)
         [(DefaultLastHttpContent. (augment-buffer buf msg-bb))]
