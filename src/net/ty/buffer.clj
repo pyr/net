@@ -12,14 +12,16 @@
   (volatile! nil))
 
 (defn augment-buffer
-  ([max-size dst src]
+  ([dst src]
    (.writeBytes dst src))
-  ([max-size dst src len]
+  ([dst src len]
    (.writeBytes dst src (int len))))
 
 (defn new-buffer
-  [max-size]
-  (Unpooled/buffer (int (* 1024 1024)) (int max-size)))
+  ([max-size]
+   (Unpooled/buffer (int (* 1024 1024)) (int max-size)))
+  ([init-size max-size]
+   (Unpooled/buffer (int init-size) (int max-size))))
 
 (defn update-content
   [max-size content msg]
@@ -36,14 +38,14 @@
 
         (<= 0 (+ msg-sz buf-sz) max-size)
         (do
-          (augment-buffer max-size @content msg-bb)
+          (augment-buffer @content msg-bb)
           nil)
 
         :else
         (do
           (let [bb (new-buffer max-size)]
-            (augment-buffer max-size buf msg-bb)
-            (augment-buffer max-size bb msg-bb (- max-size buf-sz))
+            (augment-buffer buf msg-bb)
+            (augment-buffer bb msg-bb (- max-size buf-sz))
             (vreset! content bb)
             (DefaultHttpContent. buf)))))))
 
@@ -59,10 +61,10 @@
         [(DefaultLastHttpContent. (.content msg))]
 
         (<= 0 (+ msg-sz buf-sz) max-size)
-        [(DefaultLastHttpContent. (augment-buffer max-size buf msg-bb))]
+        [(DefaultLastHttpContent. (augment-buffer buf msg-bb))]
 
         :else
-        [(DefaultHttpContent. (augment-buffer max-size buf msg-bb (- max-size buf-sz)))
+        [(DefaultHttpContent. (augment-buffer buf msg-bb (- max-size buf-sz)))
          msg]))))
 
 

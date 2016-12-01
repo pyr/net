@@ -51,6 +51,8 @@
 
 (def default-inbuf "" 10)
 
+(def default-aggregated-length "" (* 1024 1024))
+
 (defn epoll?
   "Find out if epoll is available on the underlying platform."
   []
@@ -103,10 +105,17 @@
      [(keyword (str k)) (if (< 1 (count vs)) vs (first vs))])))
 
 (defn body-params
-  [^FullHttpRequest msg headers body]
+  [{:keys [headers body]}]
   (when-let [content-type (:content-type headers)]
     (when (.startsWith content-type "application/x-www-form-urlencoded")
-      (QueryStringDecoder. body false))))
+      (QueryStringDecoder. (bb->string body) false))))
+
+(defn assoc-body-params
+  [request]
+  (let [bp (body-params request)]
+    (cond-> request
+      bp (assoc request :body-params bp)
+      bp (update request :params merge bp))))
 
 (defn byte-array?
   [x]
@@ -202,12 +211,32 @@
       (instance? Channel body)
       (f/operation-complete listener))))
 
+(defn parse-num
+  [s]
+  (try (Long/parseLong s) (catch Exception _)))
+
+(defn request-length
+  [{:keys [headers] :as req}]
+  (some-> (:content-length headers) parse-num))
+
+(defn get-response
+  [{:keys [request version]} handler ctx]
+  (let [resp (handler request)]
+    (if (instance? Channel resp)
+      (a/take! resp (partial write-response ctx version))
+      (write-response ctx version resp))))
+
 (defn netty-handler
+  "This is a stateful, per HTTP session adapter which wraps the user
+   supplied function.
+   We can use volatiles for keeping track of state due to the thread-safe
+   nature of handler adapters."
   ([handler]
-   (netty-handler handler 10))
-  ([handler inbuf]
-   (let [body  (a/chan inbuf)
-         state (volatile! :init)]
+   (netty-handler handler {}))
+  ([handler {:keys [inbuf agg-length]}]
+   (let [inbuf      (or inbuf default-inbuf)
+         agg-length (or agg-length default-aggregated-length)
+         state      (volatile! {:aggregate? false})]
      (proxy [ChannelInboundHandlerAdapter] []
        (exceptionCaught [^ChannelHandlerContext ctx e]
          (handler {:type           :error
@@ -217,20 +246,35 @@
        (channelRead [^ChannelHandlerContext ctx msg]
          (cond
            (instance? HttpRequest msg)
-           (binding [*request-ctx* ctx]
-             (let [version (.getProtocolVersion msg)
-                   resp    (handler (assoc (->request msg) :body body))]
-               (if (instance? Channel resp)
-                 (a/take! resp (partial write-response ctx version))
-                 (write-response ctx version resp))))
+           (do
+             (vswap! state assoc
+                     :version (.getProtocolVersion msg)
+                     :request (->request msg))
+             (let [length (request-length (:request @state))]
+               (if (or (nil? length) (> length agg-length))
+                 (do
+                   (vswap! state assoc-in [:request :body] (a/chan inbuf))
+                   (get-response @state handler ctx))
+                 (vswap! state
+                         #(-> (assoc % :aggregate? true)
+                              (assoc-in [:request :body]
+                                        (buf/new-buffer length length)))))))
 
            (buf/last-http-content? msg)
-           (do
-             (a/put! body msg)
-             (a/close! body))
+           (if (:aggregate? @state)
+             (-> @state
+                 (update-in [:request :body] buf/augment-buffer msg)
+                 (update :request assoc-body-params)
+                 (get-response handler ctx))
+             (doto (get-in @state [:request :body])
+               (a/put! msg)
+               (a/close! msg)))
 
            :else
-           (a/put! body msg)))))))
+           (let [body (get-in @state [:request :body])]
+             (if (:aggregate? @state)
+               (buf/augment-buffer body msg)
+               (a/put! body msg)))))))))
 
 (defn body-decoder
   [max-size]
