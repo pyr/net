@@ -39,8 +39,7 @@
            java.io.File
            java.io.FileInputStream
            java.nio.charset.Charset
-           java.nio.ByteBuffer
-           clojure.core.async.impl.protocols.Channel))
+           java.nio.ByteBuffer))
 
 (defn epoll?
   "Find out if epoll is available on the underlying platform."
@@ -94,5 +93,5 @@
   (.channel bs (if (epoll?) EpollServerSocketChannel NioServerSocketChannel)))
 
 (defn optimal-client-channel
-  [bs]
+  []
   (if (epoll?) EpollSocketChannel NioSocketChannel))
