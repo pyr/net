@@ -73,8 +73,8 @@
   [^HttpHeaders headers]
   (into
    {}
-   (for [[^String k ^String v] (-> headers .entries seq)]
-     [(-> k .toLowerCase keyword) v])))
+   (map (fn [[^Strink k ^String v]] [(-> k .toLowerCase keyword) v]))
+   (.entries headers)))
 
 (defn make-boss-group
   [{:keys [loop-thread-count disable-epoll]}]
