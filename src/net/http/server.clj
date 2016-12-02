@@ -223,6 +223,25 @@
   (fn []
     (-> ctx chan/channel chan/close-future)))
 
+(defmulti write-chunk
+  (fn [{:keys [aggregate?]} _ _]
+    (if aggregate? ::aggregated ::stream)))
+
+(defmethod write-chunk ::aggregated
+  [{:keys [request] :as state} handler ctx msg close?]
+  (buf/augment-buffer (:body request) (.content msg))
+  (when close?
+    (-> state
+        (update :request assoc-body-params)
+        (get-response handler ctx))))
+
+(defmethod write-chunk ::stream
+  [{:keys [request] :as state} handler ctx msg close?]
+  (put! (:body request) chunk (backpressure-fn ctx) (close-fn ctx))
+  (when close?
+    (a/close! (:body request))))
+
+
 (defn netty-handler
   "This is a stateful, per HTTP session adapter which wraps the user
    supplied function.
@@ -260,22 +279,10 @@
                                           (buf/new-buffer length length))))))))
 
            (buf/last-http-content? msg)
-           (let [chunk (.content msg)]
-             (if (:aggregate? @state)
-               (-> @state
-                   (update-in [:request :body] buf/augment-buffer chunk)
-                   (update :request assoc-body-params)
-                   (get-response handler ctx))
-               (doto (get-in @state [:request :body])
-                 (put! chunk (backpressure-fn ctx) (close-fn ctx))
-                 (a/close!))))
+           (write-chunk @state handler ctx msg true)
 
            (content-chunk? msg)
-           (let [body (get-in @state [:request :body])
-                 chunk (.content msg)]
-             (if (:aggregate? @state)
-               (buf/augment-buffer body chunk)
-               (put! chunk (backpressure-fn ctx) (close-fn ctx))))
+           (write-chunk @state handler ctx msg false)
 
            :else
            (do
