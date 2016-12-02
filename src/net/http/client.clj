@@ -2,7 +2,8 @@
   "Small wrapper around netty for HTTP clients."
   (:require [net.codec.b64 :as b64]
             [net.ssl       :as ssl]
-            [net.http      :as http])
+            [net.http      :as http]
+            [clojure.core.async :as async])
   (:import io.netty.bootstrap.Bootstrap
            io.netty.channel.ChannelHandlerContext
            io.netty.channel.ChannelHandlerAdapter
@@ -226,3 +227,18 @@
    (let [p (promise)]
      (async-request client request-map (fn [resp] (deliver p resp)))
      (deref p))))
+
+(defn request-chan
+  ([client request-map]
+   (let [ch (async/promise-chan)]
+     (try
+       (async-request request-map
+                      (fn [response]
+                        (if response
+                          (async/put! ch response)
+                          (async/close! ch))))
+       (catch Throwable t
+         (async/put! ch t)))
+     ch))
+  ([request-map]
+   (request-chan (build-client {}) request-map)))
