@@ -73,7 +73,7 @@
   [^HttpHeaders headers]
   (into
    {}
-   (map (fn [[^Strink k ^String v]] [(-> k .toLowerCase keyword) v]))
+   (map (fn [[^String k ^String v]] [(-> k .toLowerCase keyword) v]))
    (.entries headers)))
 
 (defn make-boss-group
