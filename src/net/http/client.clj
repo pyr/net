@@ -1,7 +1,8 @@
 (ns net.http.client
   "Small wrapper around netty for HTTP clients."
   (:require [net.codec.b64 :as b64]
-            [net.ssl       :as ssl])
+            [net.ssl       :as ssl]
+            [net.http      :as http])
   (:import io.netty.bootstrap.Bootstrap
            io.netty.channel.ChannelHandlerContext
            io.netty.channel.ChannelHandlerAdapter
@@ -190,20 +191,10 @@
 (defn build-client
   ([]
    (build-client {}))
-  ([options]
-   (let [use-epoll?   (and (epoll?) (not (:disable-epoll options)))
-         log-handler  (when-let [level (some-> (:logging options)
-                                               (keyword)
-                                               (get log-levels))]
-                        (LoggingHandler. level))
-         thread-count (or (:loop-thread-count options) 1)
-         boss-group   (if use-epoll?
-                        (EpollEventLoopGroup. thread-count)
-                        (NioEventLoopGroup.   thread-count))
-         ctx          (ssl/client-context (:ssl options))]
-     {:group   boss-group
-      :ssl-ctx ctx
-      :channel (if use-epoll? EpollSocketChannel NioSocketChannel)})))
+  ([{:keys [ssl] :as options}]
+   {:channel (http/optimal-client-channel)
+    :group   (http/make-boss-group options)
+    :ssl-ctx (ssl/client-context ssl)}))
 
 (defn async-request
   ([request-map handler]

@@ -4,9 +4,10 @@
             [net.ty.future         :as f]
             [net.ty.bootstrap      :as bs]
             [net.ty.channel        :as chan]
+            [net.http              :as http]
             [clojure.core.async    :as a]
             [net.core.async        :refer [put!]]
-            [clojure.tools.logging :refer [debug info error]])
+            [clojure.tools.logging :refer [debug info warn error]])
   (:import io.netty.channel.ChannelHandlerContext
            io.netty.channel.ChannelHandlerAdapter
            io.netty.channel.ChannelInboundHandlerAdapter
@@ -54,35 +55,7 @@
 
 (def default-aggregated-length "" (* 1024 1024))
 
-(defn epoll?
-  "Find out if epoll is available on the underlying platform."
-  []
-  (Epoll/isAvailable))
-
-(defn bb->string
-  "Convert a ByteBuf to a UTF-8 String."
-  [bb]
-  (.toString bb (Charset/forName "UTF-8")))
-
-(def method->data
-  "Yield a keyword representing an HTTP method."
-  {HttpMethod/CONNECT :connect
-   HttpMethod/DELETE  :delete
-   HttpMethod/GET     :get
-   HttpMethod/HEAD    :head
-   HttpMethod/OPTIONS :options
-   HttpMethod/PATCH   :patch
-   HttpMethod/POST    :post
-   HttpMethod/PUT     :put
-   HttpMethod/TRACE   :trace})
-
-(defn headers
-  "Get a map out of netty headers."
-  [^HttpHeaders headers]
-  (into
-   {}
-   (for [[^String k ^String v] (-> headers .entries seq)]
-     [(-> k .toLowerCase keyword) v])))
+(def ^:dynamic *request-ctx* nil)
 
 (defn int->status
   [status]
@@ -105,16 +78,16 @@
          :let [vs (seq vlist)]]
      [(keyword (str k)) (if (< 1 (count vs)) vs (first vs))])))
 
-(defn body-params
+(defn qs->body-params
   [{:keys [headers body]}]
   (when-let [content-type (:content-type headers)]
     (when (.startsWith content-type "application/x-www-form-urlencoded")
       (->params
-       (QueryStringDecoder. (bb->string body) false)))))
+       (QueryStringDecoder. (http/bb->string body) false)))))
 
 (defn assoc-body-params
   [request]
-  (let [bp (body-params request)]
+  (let [bp (qs->body-params request)]
     (cond-> request
       bp (assoc :body-params bp)
       bp (update :params merge bp))))
@@ -174,17 +147,17 @@
     :else
     (throw (IllegalArgumentException. "cannot convert chunk to HttpContent"))))
 
-(def ^:dynamic *request-ctx* nil)
+
 
 (defn ->request
   [^HttpRequest msg]
   (let [dx      (QueryStringDecoder. (.getUri msg))
-        headers (headers (.headers msg))
+        headers (http/headers (.headers msg))
         p1      (->params dx)]
     {:uri            (.path dx)
      :get-params     p1
      :params         p1
-     :request-method (method->data (.getMethod msg))
+     :request-method (http/method->data (.getMethod msg))
      :version        (-> msg .getProtocolVersion .text)
      :headers        headers}))
 
@@ -341,27 +314,6 @@
           (.addLast pipeline "aggregator" aggregator)
           (.addLast pipeline "handler"    handler))))))
 
-(def log-levels
-  {:debug LogLevel/DEBUG
-   :info  LogLevel/INFO
-   :warn  LogLevel/WARN})
-
-(defn set-optimal-channel!
-  [bs]
-  (.channel bs (if (epoll?) EpollServerSocketChannel NioServerSocketChannel)))
-
-(defn set-log-handler!
-  [bootstrap {:keys [logging]}]
-  (let [handler (when-let [level (some-> logging keyword (get log-levels))]
-                  (LoggingHandler. level))]
-    (cond-> bootstrap  handler (.handler handler))))
-
-(defn make-boss-group
-  [{:keys [loop-thread-count disable-epoll]}]
-  (if (and (epoll?) (not disable-epoll))
-    (EpollEventLoopGroup. (int (or loop-thread-count 1)))
-    (NioEventLoopGroup. (int (or loop-thread-count 1)))))
-
 (defn set-so-backlog!
   [bootstrap {:keys [so-backlog]}]
   (.option bootstrap ChannelOption/SO_BACKLOG (int (or so-backlog 1024))))
@@ -376,16 +328,16 @@
   ([options handler]
    (run-server (assoc options :ring-handler handler)))
   ([options]
-   (let [boss-group  (make-boss-group options)
+   (let [boss-group  (http/make-boss-group options)
          [host port] (get-host-port options)]
      (try
        (let [bootstrap (doto (ServerBootstrap.)
                          (set-so-backlog! options)
                          (bs/set-group! boss-group)
-                         (set-optimal-channel!)
+                         (http/set-optimal-server-channel!)
                          (bs/set-child-handler! (initializer options)))
              channel   (-> bootstrap
-                           (set-log-handler! options)
+                           (http/set-log-handler! options)
                            (bs/bind! host port)
                            (f/sync!)
                            (chan/channel))]
