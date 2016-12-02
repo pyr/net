@@ -234,12 +234,11 @@
      (try
        (async-request request-map
                       (fn [response]
-                        (when response
-                          (async/put! ch response))
-                        (async/close! ch)))
+                        (if response
+                          (async/put! ch response)
+                          (async/close! ch))))
        (catch Throwable t
-         (async/put! ch t)
-         (async/close! ch)))
+         (async/put! ch t)))
      ch))
   ([request-map]
    (request-chan (build-client {}) request-map)))
