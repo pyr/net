@@ -72,11 +72,13 @@
 
 (defn ->params
   [^QueryStringDecoder dx]
-  (reduce
-   merge {}
-   (for [[k vlist] (.parameters dx)
-         :let [vs (seq vlist)]]
-     [(keyword (str k)) (if (< 1 (count vs)) vs (first vs))])))
+  (into
+   {}
+   (map (fn [[stringk vlist]
+            (let [vs (seq vlist)
+                  k  (keyword (str k))]
+              [k (if (pos? (count vs)) (first vs) vs)])]))
+   (.parameters dx)))
 
 (defn qs->body-params
   [{:keys [headers body]}]
