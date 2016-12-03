@@ -37,24 +37,6 @@
            java.nio.charset.Charset
            javax.xml.bind.DatatypeConverter))
 
-(defn epoll?
-  "Find out if epoll is available on the underlying platform."
-  []
-  (Epoll/isAvailable))
-
-(defn bb->string
-  "Convert a ByteBuf to a UTF-8 String."
-  [bb]
-  (.toString bb (Charset/forName "UTF-8")))
-
-(defn headers
-  "Get a map out of netty headers."
-  [^HttpHeaders headers]
-  (into
-   {}
-   (for [[^String k ^String v] (-> headers .entries seq)]
-     [(-> k .toLowerCase keyword) v])))
-
 (defn response-handler
   "Capture context and msg and yield a closure
    which generates a response.
@@ -63,8 +45,8 @@
   [f ^ChannelHandlerContext ctx ^FullHttpResponse msg]
   (fn []
     (try
-      (let [headers (headers (.headers msg))
-            body    (bb->string (.content msg))
+      (let [headers (http/headers (.headers msg))
+            body    (http/bb->string (.content msg))
             req     {:status         (some-> msg .getStatus .code)
                      :headers        headers
                      :version        (-> msg .getProtocolVersion .text)
