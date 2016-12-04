@@ -94,10 +94,6 @@
       bp (assoc :body-params bp)
       bp (update :params merge bp))))
 
-(defn byte-array?
-  [x]
-  (instance? (Class/forName "[B") x))
-
 (defn input-stream-chunk
   [^InputStream is]
   (let [buf (Unpooled/buffer (.available is))]
@@ -111,45 +107,40 @@
   [^File f]
   (input-stream-chunk (FileInputStream. f)))
 
+(defprotocol ChunkEncoder
+  (chunk->http-object [chunk] "Convert Chunk to http-object"))
+
+(extend-protocol ChunkEncoder
+  (Class/forName "[B")
+  (chunk->http-object [chunk]
+    (DefaultHttpContent. (Unpooled/wrappedBuffer chunk)))
+
+  ByteBuffer
+  (chunk->http-object [chunk]
+    (DefaultHttpContent. (Unpooled/wrappedBuffer chunk)))
+
+  ByteBuf
+  (chunk->http-object [chunk]
+    (DefaultHttpContent. chunk))
+
+  InputStream
+  (chunk->http-object [chunk]
+    (DefaultHttpContent. (input-stream-chunk chunk)))
+
+  File
+  (chunk->http-object [chunk]
+    (DefaultHttpContent. (file-chunk chunk)))
+
+  String
+  (chunk->http-object [chunk]
+    (Unpooled/wrappedBuffer (.getBytes chunk "UTF8")))
+
+  HttpContent
+  (chunk->http-object [chunk] chunk))
+
 (defn content-chunk?
   [x]
-  (or (string? x)
-      (byte-array? x)
-      (instance? ByteBuf x)
-      (instance? ByteBuffer x)
-      (instance? File x)
-      (instance? HttpContent x)
-      (instance? InputStream x)))
-
-(defn chunk->http-object
-  [chunk]
-  (cond
-
-    (instance? InputStream chunk)
-    (DefaultHttpContent. (input-stream-chunk chunk))
-
-    (instance? File chunk)
-    (DefaultHttpContent. (file-chunk chunk))
-
-    (string? chunk)
-    (DefaultHttpContent. (Unpooled/wrappedBuffer (.getBytes chunk)))
-
-    (byte-array? chunk)
-    (DefaultHttpContent. (Unpooled/wrappedBuffer chunk))
-
-    (instance? HttpContent chunk)
-    chunk
-
-    (instance? ByteBuf chunk)
-    (DefaultHttpContent. chunk)
-
-    (instance? ByteBuffer chunk)
-    (DefaultHttpContent. (Unpooled/wrappedBuffer chunk))
-
-    :else
-    (throw (IllegalArgumentException. "cannot convert chunk to HttpContent"))))
-
-
+  (satisfies? ChunkEncoder x))
 
 (defn ->request
   [^HttpRequest msg]
