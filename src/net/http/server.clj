@@ -360,10 +360,11 @@
                  "X-Content-Aggregated" "false"
                  "Transfer-Encoding"    "chunked"}
        :body    rbody})
-    (let [params (:body-params request)]
+    (let [payload (with-out-str (prn request))]
       (info "handler found aggregated request")
       {:status  200
        :headers {"Content-Type"         "text/plain"
                  "X-Content-Aggregated" "true"
+                 "Content-Length"       (count payload)
                  "Transfer-Encoding"    "chunked"}
-       :body    body})))
+       :body    payload})))
