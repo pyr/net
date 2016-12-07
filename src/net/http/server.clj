@@ -304,15 +304,15 @@
   [{:keys [chunk-size inbuf ring-handler]
     :or   {chunk-size default-chunk-size
            inbuf      default-inbuf}}]
-  (let [codec      (HttpServerCodec. 4096 8192 (int chunk-size))
-        aggregator (body-decoder chunk-size)
-        handler    (netty-handler ring-handler inbuf)]
-    (proxy [ChannelInitializer] []
-      (initChannel [channel]
-        (let [pipeline (.pipeline channel)]
-          (.addLast pipeline "codec"      codec)
-          (.addLast pipeline "aggregator" aggregator)
-          (.addLast pipeline "handler"    handler))))))
+  (proxy [ChannelInitializer] []
+    (initChannel [channel]
+      (let [codec      (HttpServerCodec. 4096 8192 (int chunk-size))
+            aggregator (body-decoder chunk-size)
+            handler    (netty-handler ring-handler inbuf)
+            pipeline   (.pipeline channel)]
+        (.addLast pipeline "codec"      codec)
+        (.addLast pipeline "aggregator" aggregator)
+        (.addLast pipeline "handler"    handler)))))
 
 (defn set-so-backlog!
   [bootstrap {:keys [so-backlog]}]
