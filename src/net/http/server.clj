@@ -215,7 +215,7 @@
     (-> ctx chan/channel chan/close-future)))
 
 (defmulti write-chunk
-  (fn [{:keys [aggregate?]} _ _]
+  (fn [{:keys [aggregate?]} _ _ _ _]
     (if aggregate? ::aggregated ::stream)))
 
 (defmethod write-chunk ::aggregated
