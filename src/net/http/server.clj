@@ -228,7 +228,7 @@
 
 (defmethod write-chunk ::stream
   [{:keys [request] :as state} handler ctx msg close?]
-  (put! (:body request) chunk (backpressure-fn ctx) (close-fn ctx))
+  (put! (:body request) msg (backpressure-fn ctx) (close-fn ctx))
   (when close?
     (a/close! (:body request))))
 
