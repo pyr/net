@@ -240,9 +240,9 @@
    nature of handler adapters."
   ([handler]
    (netty-handler handler {}))
-  ([handler {:keys [inbuf agg-length]}]
+  ([handler {:keys [inbuf aggregate-length]}]
    (let [inbuf      (or inbuf default-inbuf)
-         agg-length (or agg-length default-aggregated-length)
+         agg-length (or aggregate-length default-aggregated-length)
          state      (volatile! {:aggregate? false})]
      (proxy [ChannelInboundHandlerAdapter] []
        (exceptionCaught [^ChannelHandlerContext ctx e]
@@ -301,15 +301,16 @@
               (.add out chunk))))))))
 
 (defn initializer
-  [{:keys [chunk-size inbuf ring-handler]
-    :or   {chunk-size default-chunk-size
-           inbuf      default-inbuf}}]
+  [{:keys [chunk-size ring-handler]
+    :or   {chunk-size default-chunk-size}
+    :as   opts}]
   (proxy [ChannelInitializer] []
     (initChannel [channel]
-      (let [codec      (HttpServerCodec. 4096 8192 (int chunk-size))
-            aggregator (body-decoder chunk-size)
-            handler    (netty-handler ring-handler inbuf)
-            pipeline   (.pipeline channel)]
+      (let [handler-opts (select-keys opts [:inbuf :aggregate-length])
+            codec        (HttpServerCodec. 4096 8192 (int chunk-size))
+            aggregator   (body-decoder chunk-size)
+            handler      (netty-handler ring-handler handler-opts)
+            pipeline     (.pipeline channel)]
         (.addLast pipeline "codec"      codec)
         (.addLast pipeline "aggregator" aggregator)
         (.addLast pipeline "handler"    handler)))))
