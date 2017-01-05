@@ -1,4 +1,5 @@
 (ns net.ty.buffer
+  (:require [clojure.tools.logging :refer [info debug]])
   (:import io.netty.buffer.Unpooled
            io.netty.handler.codec.http.DefaultHttpResponse
            io.netty.handler.codec.http.DefaultHttpContent
@@ -29,45 +30,82 @@
     (let [buf    @content
           msg-bb (.content msg)
           msg-sz (.capacity msg-bb)
-          buf-sz (if buf (.capacity buf) 0)]
+          buf-sz (if buf (.writerIndex buf) 0)
+          new-sz (+ buf-sz msg-sz)
+          pad-sz (- max-size buf-sz)]
+      (debug "capacity held    :" (if buf (.capacity buf) 0))
+      (debug "index held       :" (if buf (.writerIndex buf) 0))
+      (debug "capacity provided:" (if msg-bb (.capacity msg-bb) 0))
+      (debug "buffer size now  :" buf-sz)
+      (debug "new size         :" new-sz)
+      (debug "pad size         :" (- max-size buf-sz))
       (cond
+        (and (nil? buf) (= max-size msg-sz))
+        (do
+          (debug "nil buf, msg size matches max-chunk, forwarding")
+          (DefaultHttpContent. (Unpooled/copiedBuffer msg-bb)))
+
         (nil? buf)
         (do
+          (debug "nil buf, storing copy of input")
           (vreset! content (Unpooled/copiedBuffer msg-bb))
           nil)
 
-        (<= 0 (+ msg-sz buf-sz) max-size)
+        (< new-sz max-size)
         (do
-          (augment-buffer @content msg-bb)
+          (debug "buffer fits")
+          (augment-buffer buf msg-bb)
           nil)
+
+        (= new-sz max-size)
+        (do
+          (debug "buffer fills perfectly")
+          (augment-buffer buf msg-bb)
+          (vreset! content nil)
+          (DefaultHttpContent. buf))
 
         :else
         (do
-          (let [bb (new-buffer max-size)]
-            (augment-buffer buf msg-bb)
-            (augment-buffer bb msg-bb (- max-size buf-sz))
+          (let [bb (new-buffer max-size max-size)]
+            (debug "adding" pad-sz "bytes to msg-bb which already contains"  msg-sz)
+            (augment-buffer buf msg-bb pad-sz)
+            (augment-buffer bb msg-bb (- msg-sz pad-sz))
             (vreset! content bb)
             (DefaultHttpContent. buf)))))))
 
 (defn release-contents
   [max-size content msg]
   (locking content
-    (let [buf @content
+    (let [buf    @content
           msg-bb (.content msg)
           msg-sz (.capacity msg-bb)
-          buf-sz (if buf (.capacity buf) 0)]
+          buf-sz (if buf (.writerIndex buf) 0)
+          new-sz (+ buf-sz msg-sz)
+          pad-sz (- max-size buf-sz)]
+      (debug "capacity held    :" (if buf (.capacity buf) 0))
+      (debug "index held       :" (if buf (.writerIndex buf) 0))
+      (debug "capacity provided:" (if msg-bb (.capacity msg-bb) 0))
+      (debug "buffer size now  :" buf-sz)
+      (debug "new size         :" new-sz)
+      (debug "pad size         :" (- max-size buf-sz))
       (cond
         (nil? buf)
         (do
-          (.retain (.content msg))
-          [(DefaultLastHttpContent. (.content msg))])
+          (debug "lonely http content")
+          [(DefaultLastHttpContent. (Unpooled/copiedBuffer msg-bb))])
 
-        (<= 0 (+ msg-sz buf-sz) max-size)
-        [(DefaultLastHttpContent. (augment-buffer buf msg-bb))]
+        (<= new-sz max-size)
+        (do
+          (debug "last-http content fits into existing buffer")
+          (augment-buffer buf msg-bb)
+          [(DefaultLastHttpContent. buf)])
 
         :else
-        [(DefaultHttpContent. (augment-buffer buf msg-bb (- max-size buf-sz)))
-         msg]))))
+        (do
+          (debug "last-http content does not fit, splitting")
+          (augment-buffer buf msg-bb pad-sz)
+          [(DefaultHttpContent. buf)
+           (DefaultLastHttpContent. (Unpooled/copiedBuffer msg-bb))])))))
 
 
 (defn last-http-content?
