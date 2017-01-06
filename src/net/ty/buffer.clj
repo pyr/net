@@ -14,7 +14,9 @@
 
 (defn augment-buffer
   ([dst src]
-   (.writeBytes dst src))
+   (if (pos? (.capacity src))
+     (.writeBytes dst src)
+     dst))
   ([dst src len]
    (.writeBytes dst src (int len))))
 
