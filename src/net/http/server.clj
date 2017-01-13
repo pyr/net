@@ -28,9 +28,11 @@
            io.netty.handler.codec.http.HttpMethod
            io.netty.handler.codec.http.HttpHeaders
            io.netty.handler.codec.http.HttpResponseStatus
+           io.netty.handler.codec.http.HttpUtil
            io.netty.handler.codec.http.DefaultHttpResponse
            io.netty.handler.codec.http.DefaultHttpContent
            io.netty.handler.codec.http.DefaultLastHttpContent
+           io.netty.handler.codec.http.DefaultFullHttpResponse
            io.netty.handler.codec.http.HttpRequest
            io.netty.handler.codec.http.HttpContent
            io.netty.handler.codec.http.LastHttpContent
@@ -255,6 +257,10 @@
          (cond
            (instance? HttpRequest msg)
            (do
+             ;; 100-Continue
+             (when (HttpUtil/is100ContinueExpected msg)
+               (.write ctx (DefaultFullHttpResponse. HttpVersion/HTTP_1_1
+                                                     HttpResponseStatus/CONTINUE)))
              (vswap! state assoc
                      :version (.getProtocolVersion msg)
                      :request (->request msg))
