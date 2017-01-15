@@ -1,4 +1,4 @@
-(ns net.server
+(ns chat.server
   (:require [net.ty.bootstrap :as bootstrap]
             [net.ty.channel   :as channel]
             [net.ty.pipeline  :as pipeline]

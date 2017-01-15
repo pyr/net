@@ -1,27 +1,40 @@
 net: the clojure netty companion
 ================================
 
-Net provides a clojure foundation to implement asynchronous
-networking based on netty.
+Net provides a clojure foundation to implement asynchronous networking
+based on netty.
 
-It is much narrower in scope and features than [aleph](https://github.com/ztellman/aleph), which you might
-want to look into.
+It is much narrower in scope and features than
+[aleph](https://github.com/ztellman/aleph), which you might want to
+look into if you want a full-fledged asynchronous programming toolkit
+for clojure.
 
-Pending documentation, here is what you can find in net today:
+**net** is rather geared towards people with prior netty knowledge
+wanting to keep the same workflow in, *hopefully*, idiomatic Clojure,
+and nothing but standard clojure facilities.
 
-- Light facades around netty concepts such as channels, pipelines, channel initializers and bootstraps
-- Facilities to create SSL client and server contexts from PEM files
+- Light facades around netty concepts such as channels, pipelines,
+  channel initializers and bootstraps
+- Facilities to create TLS client and server contexts from PEM files
 - Ring-like HTTP(S) server facade
 - HTTP(S) client
-- Simple interface to create TCP server with optional SSL support
+- Simple interface to create TCP server with optional TLS support
+- Clojure [core.async](https://github.com/clojure/core.async) support
 
 ## Installation
 
 ```clojure
-    [[spootnik/net "0.2.20"]]
+    [[spootnik/net "0.3.3-beta1"]]
 ```
 
 ## Changelog
+
+### 0.3.3-beta1
+
+- Rework HTTP support to be aligned with
+  [jet](https://github.com/mpenet/jet)
+- Provide a single HTTP server interface, which allows aggregating or
+  streaming body content.
 
 ### 0.2.20
 
@@ -44,4 +57,4 @@ Pending documentation, here is what you can find in net today:
 
 ## License
 
-Copyright © 2015, 2016 Pierre-Yves Ritschard, MIT License.
+Copyright © 2015, 2016, 2017 Pierre-Yves Ritschard, MIT License.

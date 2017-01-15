@@ -1,4 +1,5 @@
 (ns net.http
+  "Functions common to HTTP clients and servers"
   (:import io.netty.channel.ChannelHandlerContext
            io.netty.channel.ChannelHandlerAdapter
            io.netty.channel.ChannelInboundHandlerAdapter
@@ -64,6 +65,8 @@
    HttpMethod/TRACE   :trace})
 
 (def log-levels
+  "Keyword to level map used as a helper when
+   setting up log handlers."
   {:debug LogLevel/DEBUG
    :info  LogLevel/INFO
    :warn  LogLevel/WARN})
@@ -77,21 +80,26 @@
    (.entries headers)))
 
 (defn make-boss-group
+  "Create an event loop group. Try setting up an epoll event loop group
+   unless either instructed not to do so or it is no available."
   [{:keys [loop-thread-count disable-epoll]}]
   (if (and (epoll?) (not disable-epoll))
     (EpollEventLoopGroup. (int (or loop-thread-count 1)))
     (NioEventLoopGroup. (int (or loop-thread-count 1)))))
 
 (defn set-log-handler!
-  [bootstrap {:keys [logging]}]
+  "Add log hander to a bootstrap"
+  [^Bootstrap bootstrap {:keys [logging]}]
   (let [handler (when-let [level (some-> logging keyword (get log-levels))]
                   (LoggingHandler. level))]
     (cond-> bootstrap  handler (.handler handler))))
 
 (defn set-optimal-server-channel!
+  "Add optimal channel to a server bootstrap"
   [bs]
   (.channel bs (if (epoll?) EpollServerSocketChannel NioServerSocketChannel)))
 
 (defn optimal-client-channel
+  "Figure out which client channel to use"
   []
   (if (epoll?) EpollSocketChannel NioSocketChannel))
