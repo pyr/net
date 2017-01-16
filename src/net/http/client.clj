@@ -1,8 +1,12 @@
 (ns net.http.client
   "Small wrapper around netty for HTTP clients."
-  (:require [net.codec.b64 :as b64]
-            [net.ssl       :as ssl])
+  (:require [net.codec.b64      :as b64]
+            [net.ssl            :as ssl]
+            [net.http           :as http]
+            [clojure.spec       :as s]
+            [clojure.core.async :as async])
   (:import io.netty.bootstrap.Bootstrap
+           io.netty.channel.Channel
            io.netty.channel.ChannelHandlerContext
            io.netty.channel.ChannelHandlerAdapter
            io.netty.channel.ChannelInboundHandlerAdapter
@@ -35,24 +39,6 @@
            java.nio.charset.Charset
            javax.xml.bind.DatatypeConverter))
 
-(defn epoll?
-  "Find out if epoll is available on the underlying platform."
-  []
-  (Epoll/isAvailable))
-
-(defn bb->string
-  "Convert a ByteBuf to a UTF-8 String."
-  [bb]
-  (.toString bb (Charset/forName "UTF-8")))
-
-(defn headers
-  "Get a map out of netty headers."
-  [^HttpHeaders headers]
-  (into
-   {}
-   (for [[^String k ^String v] (-> headers .entries seq)]
-     [(-> k .toLowerCase keyword) v])))
-
 (defn response-handler
   "Capture context and msg and yield a closure
    which generates a response.
@@ -61,8 +47,8 @@
   [f ^ChannelHandlerContext ctx ^FullHttpResponse msg]
   (fn []
     (try
-      (let [headers (headers (.headers msg))
-            body    (bb->string (.content msg))
+      (let [headers (http/headers (.headers msg))
+            body    (http/bb->string (.content msg))
             req     {:status         (some-> msg .getStatus .code)
                      :headers        headers
                      :version        (-> msg .getProtocolVersion .text)
@@ -84,7 +70,8 @@
         (callback)))))
 
 (defn ssl-ctx-handler
-  [ssl-ctx channel]
+  "Add an SSL context handler to a channel"
+  [ssl-ctx ^Channel channel]
   (.newHandler ssl-ctx (.alloc channel)))
 
 (defn request-initializer
@@ -101,41 +88,65 @@
          (.addLast pipeline "aggregator" (HttpObjectAggregator. (int max-body-size)))
          (.addLast pipeline "handler"    (netty-handler handler)))))))
 
-(def log-levels
-  {:debug LogLevel/DEBUG
-   :info  LogLevel/INFO
-   :warn  LogLevel/WARN})
+(def http-versions
+  "Keyword HTTP versions"
+  {:http-1-1 HttpVersion/HTTP_1_1
+   :http-1-0 HttpVersion/HTTP_1_0})
+
+(defn string->version
+  "When possible, get appropriate HttpVersion from a string.
+   Throws when impossible."
+  [^String s ^Exception e]
+  (cond
+    (re-matches #"(?i)http/1.1" s) HttpVersion/HTTP_1_1
+    (re-matches #"(?i)http/1.0" s) HttpVersion/HTTP_1_0
+    :else                          (throw e)))
 
 (defn data->version
+  "Get appropriate HttpVersion from a number of possible inputs.
+   Defaults to HTTP/1.1 when nil, translate known keywords and
+   strings or pass an HttpVersion through.
+
+   Throws on other values."
   [v]
-  (let [e (ex-info (str "invalid http version supplied: " v) {})]
+  (let [e (IllegalArgumentException. (str "invalid http version: " v))]
     (cond
-      (nil? v)     HttpVersion/HTTP_1_1
-      (string? v)  (cond (re-matches #"(?i)http/1.1" v) HttpVersion/HTTP_1_1
-                         (re-matches #"(?i)http/1.0" v) HttpVersion/HTTP_1_0
-                         :else                          (throw e))
-      :else        (throw e))))
+      (nil? v)                  HttpVersion/HTTP_1_1
+      (keyword? v)              (or (get http-versions v) (throw e))
+      (string? v)               (string->version v e)
+      (instance? HttpVersion v) v
+      :else                     (throw e))))
+
+(def http-methods
+  "Keyword HTTP methods"
+  {:connect HttpMethod/CONNECT
+   :delete  HttpMethod/DELETE
+   :get     HttpMethod/GET
+   :head    HttpMethod/HEAD
+   :options HttpMethod/OPTIONS
+   :patch   HttpMethod/PATCH
+   :post    HttpMethod/POST
+   :put     HttpMethod/PUT
+   :trace   HttpMethod/TRACE})
 
 (defn data->method
-  [m]
-  (let [methods {:connect HttpMethod/CONNECT
-                 :delete  HttpMethod/DELETE
-                 :get     HttpMethod/GET
-                 :head    HttpMethod/HEAD
-                 :options HttpMethod/OPTIONS
-                 :patch   HttpMethod/PATCH
-                 :post    HttpMethod/POST
-                 :put     HttpMethod/PUT
-                 :trace   HttpMethod/TRACE}
-        e       (ex-info (str "invalid HTTP method supplied: " m) {})]
-    (cond
-      (keyword? m) (or (get methods m) (throw e))
-      (string? m)  (or (get methods (-> m .toLowerCase keyword)) (throw e))
-      (nil? m)     HttpMethod/GET
-      :else        (throw e))))
+  "Get appropriate HttpMethod from a number of possible inputs.
+   Defaults to GET when nil, translate known keywords and strings,
+   or pass a HttpMethod through.
 
-(defn data->headers
-  [headers input host]
+   Throws on other values."
+  [m]
+  (let [e  (IllegalArgumentException. (str "invalid http method: " m))
+        kw (when (string? m) (-> m .toLowerCase keyword))]
+    (cond
+      (instance? HttpMethod m) m
+      (nil? m)                 HttpMethod/GET
+      (keyword? m)             (or (get http-methods m) (throw e))
+      (string? m)              (or (get http-methods kw) (throw e))
+      :else                    (throw e))))
+
+(defn ^HttpHeaders data->headers
+  [^HttpHeaders headers input ^String host]
   (when-not (or (empty? input) (map? input))
     (throw (ex-info "HTTP headers should be supplied as a map" {})))
   (.set headers "host" host)
@@ -143,15 +154,20 @@
                 (get headers "connection"))
     (.set headers "connection" "close"))
   (doseq [[k v] input]
-    (.set headers (name k) (str v))))
+    (.set headers (name k) (str v)))
+  headers)
 
 (defn auth->headers
+  "If basic auth is present as a map within a request, add the
+   corresponding header."
   [headers {:keys [user password]}]
   (when (and user password)
     (.set headers "Authorization"
-          (format "Basic %s" (b64/s->b64 (str user ":" password))))))
+          (format "Basic %s" (b64/s->b64 (str user ":" password)))))
+  headers)
 
 (defn data->body
+  "Add body to a request"
   [request method body]
   (when body
     (let [headers (.headers request)
@@ -162,7 +178,8 @@
       (when-not (.get headers "Content-Length")
         (.set headers "Content-Length" (count body))))))
 
-(defn data->uri
+(defn ^URI data->uri
+  "Produce a valid URI from arguments found in a request map"
   [^URI uri query]
   (if (seq query)
     (let [qse (QueryStringEncoder. (str uri))]
@@ -175,6 +192,7 @@
     uri))
 
 (defn data->request
+  "Produce a valid request from a "
   [{:keys [body headers request-method version query uri auth]}]
   (let [uri     (data->uri uri query)
         version (data->version version)
@@ -188,24 +206,22 @@
     request))
 
 (defn build-client
+  "Create an http client instance. In most cases you will need only
+   one per JVM. You may need several if you want to operate under
+   different TLS contexts"
   ([]
    (build-client {}))
-  ([options]
-   (let [use-epoll?   (and (epoll?) (not (:disable-epoll options)))
-         log-handler  (when-let [level (some-> (:logging options)
-                                               (keyword)
-                                               (get log-levels))]
-                        (LoggingHandler. level))
-         thread-count (or (:loop-thread-count options) 1)
-         boss-group   (if use-epoll?
-                        (EpollEventLoopGroup. thread-count)
-                        (NioEventLoopGroup.   thread-count))
-         ctx          (ssl/client-context (:ssl options))]
-     {:group   boss-group
-      :ssl-ctx ctx
-      :channel (if use-epoll? EpollSocketChannel NioSocketChannel)})))
+  ([{:keys [ssl] :as options}]
+   (let [disable-epoll? (-> options :disable-epoll boolean)]
+     {:channel (http/optimal-client-channel disable-epoll?)
+      :group   (http/make-boss-group options)
+      :ssl-ctx (ssl/client-context ssl)})))
 
 (defn async-request
+  "Execute an asynchronous HTTP request, produce the response
+   asynchronously on the provided `handler` function.
+
+   If no client is provided, create one."
   ([request-map handler]
    (async-request (build-client {}) request-map handler))
   ([{:keys [group channel ssl-ctx max-size]} request-map handler]
@@ -229,9 +245,129 @@
      (-> ch .closeFuture .sync))))
 
 (defn request
+  "Execute a request against an asynchronous client. If no client exists, create one.
+   Waits for the response and returns it."
   ([request-map]
    (request (build-client {}) request-map))
   ([client request-map]
    (let [p (promise)]
      (async-request client request-map (fn [resp] (deliver p resp)))
      (deref p))))
+
+(defn request-chan
+  "Execute a request against an asynchronous client and produce the response on
+   a promise channel."
+  ([client request-map]
+   (let [ch (async/promise-chan)]
+     (try
+       (async-request request-map
+                      (fn [response]
+                        (if response
+                          (async/put! ch response)
+                          (async/close! ch))))
+       (catch Throwable t
+         (async/put! ch t)))
+     ch))
+  ([request-map]
+   (request-chan (build-client {}) request-map)))
+
+(defn chunked?
+  "Predicate to determine whether a request is chunked?"
+  [request]
+  (instance? clojure.core.async.impl.protocols.Channel (:body request)))
+
+;; Specs
+;; =====
+
+;; The URI is the only required part of a request map, if it
+;; is a string, it will be parsed to a URI.
+
+(s/def ::uri (s/or :uri #(instance? java.net.URI %) :string string?))
+
+;; We parse request methods liberally, they may be
+;; a string, keyword or a Netty HttpMethod instance.
+;; A nil request method implies GET.
+
+(def method-re #"(?i)^(connect|delete|get|head|options|patch|post|put|trace)$")
+
+(s/def ::keyword-method #{:connect :delete :get :head :options
+                          :patch :post :put :trace})
+(s/def ::string-method  #(re-matches method-re %))
+(s/def ::request-method (s/or :keyword ::keyword-method
+                              :string  ::string-method
+                              :method  #(instance? HttpMethod %)))
+
+;; Version specifications are also parsed loosely.
+;; nil versions mean HTTP 1.1, strings, keywords and HttpVersion instances
+;; are also allowed.
+
+(def version-re #"(?i)^http/1.[01]$")
+
+(s/def ::version (s/or :keyword #{:http-1-1 :http-1-0}
+                       :string  (s/and string? #(re-matches version-re %))
+                       :version #(instance? HttpVersion %)))
+
+;; Query args are maps of keyword or string to anything.
+;; When values are sequential, arguments are looped over. Any other
+;; value is coerced to a string.
+
+(s/def ::query (s/map-of (s/or :keyword keyword? :string string?) any?))
+
+;; When auth is present, it should be a map of `:user` and `:password`.
+
+(s/def ::user string?)
+(s/def ::password string?)
+(s/def ::auth (s/keys :req-un [::user ::password]))
+
+;; Bring everything together in our request map
+
+(s/def ::request (s/keys
+                  :req-un [::uri]
+                  :opt-un [::request-method ::body ::version ::query ::auth]))
+
+;;
+(s/def ::build-client-opts
+  (s/keys :opt-un [::ssl ::http/loop-thread-count
+                   ::http/disable-epoll]))
+
+(s/def ::client
+  (s/keys :req-un [::channel ::group ::ssl-ctx]))
+
+(s/fdef data->request
+        :args (s/cat :request ::request)
+        :ret #(instance? HttpRequest %))
+
+(s/fdef string->version
+        :args (s/cat :version string? :e #(instance? Exception %))
+        :ret  #(instance? HttpVersion %))
+
+(s/fdef data->version
+        :args (s/cat :version (s/nilable ::version))
+        :ret  #(instance? HttpVersion %))
+
+(s/fdef data->method
+        :args (s/cat :method (s/nilable ::request-method))
+        :ret  #(instance? HttpMethod %))
+
+(s/fdef data->uri
+        :args (s/cat :uri #(instance? URI %) :query (s/nilable ::query))
+        :ret  #(instance? URI %))
+
+(s/fdef data->headers
+        :args (s/cat :headers #(instance? HttpHeaders %)
+                     :input (s/nilable ::headers)
+                     :host string?)
+        :ret  #(instance? HttpHeaders %))
+
+(s/fdef auth->headers
+        :args (s/cat :headers #(instance? HttpHeaders %)
+                     :auth   (s/nilable ::auth))
+        :ret #(instance? HttpHeaders %))
+
+(s/fdef build-client
+        :args (s/cat :opts (s/nilable ::build-client-opts))
+        :ret  ::client)
+
+(s/fdef chunked?
+        :args (s/cat :request ::request)
+        :ret  boolean?)

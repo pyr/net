@@ -1,9 +1,13 @@
 (ns net.ty.bootstrap
-  (:require [clojure.spec :as s])
+  "A clojure facade to build netty bootstraps.
+   In netty, bootstraps are helpers to get channels."
+  (:require [clojure.spec   :as s]
+            [net.ty.channel :as chan])
   (:import java.net.InetAddress
            java.net.NetworkInterface
            java.net.SocketAddress
            io.netty.util.AttributeKey
+           io.netty.bootstrap.AbstractBootstrap
            io.netty.bootstrap.ServerBootstrap
            io.netty.bootstrap.Bootstrap
            io.netty.buffer.ByteBufAllocator
@@ -16,6 +20,150 @@
            io.netty.channel.socket.nio.NioServerSocketChannel
            io.netty.channel.socket.nio.NioSocketChannel
            io.netty.channel.socket.nio.NioDatagramChannel))
+
+(def channel-options
+  "Valid options for bootstraps"
+  {:allocator                    ChannelOption/ALLOCATOR
+   :allow-half-closure           ChannelOption/ALLOW_HALF_CLOSURE
+   :auto-read                    ChannelOption/AUTO_READ
+   :connect-timeout-millis       ChannelOption/CONNECT_TIMEOUT_MILLIS
+   :ip-multicast-addr            ChannelOption/IP_MULTICAST_ADDR
+   :ip-multicast-if              ChannelOption/IP_MULTICAST_IF
+   :ip-multicast-loop-disabled   ChannelOption/IP_MULTICAST_LOOP_DISABLED
+   :ip-multicast-ttl             ChannelOption/IP_MULTICAST_TTL
+   :ip-tos                       ChannelOption/IP_TOS
+   :max-messages-per-read        ChannelOption/MAX_MESSAGES_PER_READ
+   :message-size-estimator       ChannelOption/MESSAGE_SIZE_ESTIMATOR
+   :rcvbuf-allocator             ChannelOption/RCVBUF_ALLOCATOR
+   :so-backlog                   ChannelOption/SO_BACKLOG
+   :so-broadcast                 ChannelOption/SO_BROADCAST
+   :so-keepalive                 ChannelOption/SO_KEEPALIVE
+   :so-linger                    ChannelOption/SO_LINGER
+   :so-rcvbuf                    ChannelOption/SO_RCVBUF
+   :so-reuseaddr                 ChannelOption/SO_REUSEADDR
+   :so-sndbuf                    ChannelOption/SO_SNDBUF
+   :so-timeout                   ChannelOption/SO_TIMEOUT
+   :tcp-nodelay                  ChannelOption/TCP_NODELAY
+   :write-buffer-high-water-mark ChannelOption/WRITE_BUFFER_HIGH_WATER_MARK
+   :write-buffer-low-water-mark  ChannelOption/WRITE_BUFFER_LOW_WATER_MARK
+   :write-spin-count             ChannelOption/WRITE_SPIN_COUNT})
+
+(defn ^ChannelOption ->channel-option
+  [^clojure.lang.Keyword k]
+  (or (channel-options k)
+      (throw (ex-info (str "invalid channel option: " (name k)) {}))))
+
+(def nio-server-socket-channel NioServerSocketChannel)
+(def nio-socket-channel        NioSocketChannel)
+(def nio-datagram-channel      NioDatagramChannel)
+
+(defn nio-event-loop-group
+  "Yield a new NioEventLoopGroup"
+  []
+  (NioEventLoopGroup.))
+
+(defn ^ServerBootstrap server-bootstrap
+  "Build a server bootstrap from a configuration map"
+  [config]
+  (when-not (s/valid? ::server-bootstrap-schema config)
+    (throw (IllegalArgumentException. "invalid server bootstrap configuration")))
+  (let [bs (ServerBootstrap.)]
+    (.group   bs (or (:group config) (nio-event-loop-group)))
+    (.channel bs (or (:channel config) nio-server-socket-channel))
+    (doseq [[k v] (:options config) :let [copt (->channel-option k)]]
+      (.option bs copt (if (number? v) (int v) v)))
+    (doseq [[k v] (:child-options config) :let [copt (->channel-option k)]]
+      (.childOption bs copt (if (number? v) (int v) v)))
+    (doseq [[k v] (:child-attrs config)]
+      (.childAttr bs (AttributeKey/valueOf (name k)) v))
+    (when-let [group (:child-group config)]
+      (.childGroup bs group))
+    (.childHandler bs (:handler config))
+    (.validate bs)))
+
+(defn ^Bootstrap bootstrap
+  "Build a client bootstrap from a configuration map"
+  [config]
+  (when-not (s/valid? ::bootstrap-schema config)
+    (println (s/explain-out (s/explain-data ::bootstrap-schema config)))
+    (throw (IllegalArgumentException. "invalid bootstrap configuration")))
+  (let [bs (Bootstrap.)]
+    (.group bs (or (:group config) (nio-event-loop-group)))
+    (.channel bs (or (:channel config) nio-socket-channel))
+    (doseq [[k v] (:options config) :let [copt (->channel-option k)]]
+      (.option bs copt (if (number? v) (int v) v)))
+    (doseq [[k v] (:attrs config)]
+      (.attr bs (AttributeKey/valueOf (name k)) v))
+    (when-let [[host port] (:remote-address config)]
+      (.remoteAddress bs host (int port)))
+    (.handler bs (:handler config))
+    (.validate bs)))
+
+(defn sync!
+  "Synchronize bootstrap"
+  [^AbstractBootstrap bs]
+  (.sync bs))
+
+(defn bind!
+  "Bind bootstrap to a host and port"
+  [^ServerBootstrap bs ^String host ^Long port]
+  (.bind bs host (int port)))
+
+(defn remote-address!
+  "Set remote address for a client bootstrap, allows host and port
+   to be provided as a SocketAddress"
+  ([bs ^SocketAddress sa]
+   (.remoteAddress bs sa))
+  ([bs host ^Long port]
+   (.remoteAddress bs host (int port))))
+
+(defn connect!
+  "Attempt connection of a bootstrap. Accepts as pre-configured bootstrap,
+   and optionally a SocketAddressor Host and Port."
+  ([bs]
+   (.connect bs))
+  ([bs ^SocketAddress sa]
+   (.connect bs sa))
+  ([bs x y]
+   (.connect bs x y)))
+
+(defn local-address!
+  "Sets the bootstrap's local address. Accepts either a SocketAddress or
+   Host and Port."
+  ([bs x]
+   (.localAddress bs x))
+  ([bs x y]
+   (.localAddress bs x y)))
+
+(defn validate!
+  "Validate that a bootstrap has correct parameters."
+  ([bs]
+   (.validate bs)))
+
+(defn set-group!
+  "Set the group on top of which channels will be created and then handled."
+  [bs group]
+  (.group bs group))
+
+(defn shutdown-gracefully!
+  "Gracefully shut down a group"
+  [group]
+  (.shutdownGracefully group))
+
+(defn shutdown-fn
+  "Closure to shutdown a channel and associated group"
+  [chan group]
+  (fn []
+    (chan/close! chan)
+    (shutdown-gracefully! group)))
+
+(defn set-child-handler!
+  "A server bootstrap has a child handler, this methods helps set it"
+  [bootstrap handler]
+  (.childHandler bootstrap handler))
+
+;; Specs
+;; =====
 
 (s/def ::allocator (partial instance? ByteBufAllocator))
 (s/def ::allow-half-closure boolean?)
@@ -87,109 +235,6 @@
 (s/def ::bootstrap-schema
   (s/keys :req-un [::handler]
           :opt-un [::group ::options ::attrs ::channel ::remote-address]))
-
-(def channel-options
-  {:allocator                    ChannelOption/ALLOCATOR
-   :allow-half-closure           ChannelOption/ALLOW_HALF_CLOSURE
-   :auto-read                    ChannelOption/AUTO_READ
-   :connect-timeout-millis       ChannelOption/CONNECT_TIMEOUT_MILLIS
-   :ip-multicast-addr            ChannelOption/IP_MULTICAST_ADDR
-   :ip-multicast-if              ChannelOption/IP_MULTICAST_IF
-   :ip-multicast-loop-disabled   ChannelOption/IP_MULTICAST_LOOP_DISABLED
-   :ip-multicast-ttl             ChannelOption/IP_MULTICAST_TTL
-   :ip-tos                       ChannelOption/IP_TOS
-   :max-messages-per-read        ChannelOption/MAX_MESSAGES_PER_READ
-   :message-size-estimator       ChannelOption/MESSAGE_SIZE_ESTIMATOR
-   :rcvbuf-allocator             ChannelOption/RCVBUF_ALLOCATOR
-   :so-backlog                   ChannelOption/SO_BACKLOG
-   :so-broadcast                 ChannelOption/SO_BROADCAST
-   :so-keepalive                 ChannelOption/SO_KEEPALIVE
-   :so-linger                    ChannelOption/SO_LINGER
-   :so-rcvbuf                    ChannelOption/SO_RCVBUF
-   :so-reuseaddr                 ChannelOption/SO_REUSEADDR
-   :so-sndbuf                    ChannelOption/SO_SNDBUF
-   :so-timeout                   ChannelOption/SO_TIMEOUT
-   :tcp-nodelay                  ChannelOption/TCP_NODELAY
-   :write-buffer-high-water-mark ChannelOption/WRITE_BUFFER_HIGH_WATER_MARK
-   :write-buffer-low-water-mark  ChannelOption/WRITE_BUFFER_LOW_WATER_MARK
-   :write-spin-count             ChannelOption/WRITE_SPIN_COUNT})
-
-(defn ^ChannelOption ->channel-option
-  [^clojure.lang.Keyword k]
-  (or (channel-options k)
-      (throw (ex-info (str "invalid channel option: " (name k)) {}))))
-
-
-(def nio-server-socket-channel NioServerSocketChannel)
-(def nio-socket-channel        NioSocketChannel)
-(def nio-datagram-channel      NioDatagramChannel)
-
-(defn nio-event-loop-group
-  []
-  (NioEventLoopGroup.))
-
-(defn ^ServerBootstrap server-bootstrap
-  [config]
-  (when-not (s/valid? ::server-bootstrap-schema config)
-    (throw (IllegalArgumentException. "invalid server bootstrap configuration")))
-  (let [bs (ServerBootstrap.)]
-    (.group   bs (or (:group config) (nio-event-loop-group)))
-    (.channel bs (or (:channel config) nio-server-socket-channel))
-    (doseq [[k v] (:options config) :let [copt (->channel-option k)]]
-      (.option bs copt (if (number? v) (int v) v)))
-    (doseq [[k v] (:child-options config) :let [copt (->channel-option k)]]
-      (.childOption bs copt (if (number? v) (int v) v)))
-    (doseq [[k v] (:child-attrs config)]
-      (.childAttr bs (AttributeKey/valueOf (name k)) v))
-    (when-let [group (:child-group config)]
-      (.childGroup bs group))
-    (.childHandler bs (:handler config))
-    (.validate bs)))
-
-(defn ^Bootstrap bootstrap
-  [config]
-  (when-not (s/valid? ::bootstrap-schema config)
-    (println (s/explain-out (s/explain-data ::bootstrap-schema config)))
-    (throw (IllegalArgumentException. "invalid bootstrap configuration")))
-  (let [bs (Bootstrap.)]
-    (.group bs (or (:group config) (nio-event-loop-group)))
-    (.channel bs (or (:channel config) nio-socket-channel))
-    (doseq [[k v] (:options config) :let [copt (->channel-option k)]]
-      (.option bs copt (if (number? v) (int v) v)))
-    (doseq [[k v] (:attrs config)]
-      (.attr bs (AttributeKey/valueOf (name k)) v))
-    (when-let [[host port] (:remote-address config)]
-      (.remoteAddress bs host (int port)))
-    (.handler bs (:handler config))
-    (.validate bs)))
-
-(defn bind!
-  [^ServerBootstrap bs ^String host ^Long port]
-  (.bind bs host (int port)))
-
-(defn remote-address!
-  ([bs ^SocketAddress sa]
-   (.remoteAddress bs sa))
-  ([bs host ^Long port]
-   (.remoteAddress bs host (int port))))
-
-(defn connect!
-  ([bs]
-   (.connect bs))
-  ([bs ^SocketAddress sa]
-   (.connect bs sa))
-  ([bs x y]
-   (.connect bs x y)))
-
-(defn local-address!
-  ([bs x]
-   (.localAddress bs x))
-  ([bs x y]
-   (.localAddress bs x y)))
-
-(defn validate!
-  ([bs]
-   (.validate bs)))
 
 (s/fdef ->channel-option
         :args (s/cat :k keyword?)
