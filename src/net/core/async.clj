@@ -25,3 +25,39 @@
      nil))
   ([ch msg backpressure!]
    (put! ch msg backpressure! nil)))
+
+(defn validating-promise-chan
+  "A promise chan which ensures that values produced
+   to it match a given spec. Failing to match the spec
+   will produce `error-value` on the channel.
+
+   When `error-value` is a function, call it with no
+   args to produce the error value, or produce
+   `error-value` itself.
+
+   The 1-arity version produces nil on the chan in case of errors."
+  ([spec error-value]
+   (a/promise-chan (map (partial s/assert* spec))
+                   (fn [_] (if (fn? error-value)
+                             (error-value)
+                             error-value))))
+  ([spec]
+   (validating-promise-chan spec nil)))
+
+(defn validating-chan
+  "A chan which ensures that values produced
+   to it match a given spec. Failing to match the spec
+   will produce `error-value` on the channel.
+
+   When `error-value` is a function, call it with no
+   args to produce the error value, or produce
+   `error-value` itself.
+
+   The 1-arity version produces nil on the chan in case of errors."
+  ([spec buf-or-n error-value]
+   (a/chan buf-or-n (map (partial s/assert* spec))
+           (fn [_] (if (fn? error-value)
+                     (error-value)
+                     error-value))))
+  ([spec buf-or-n]
+   (validating-chan spec buf-or-n nil)))
