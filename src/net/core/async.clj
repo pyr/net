@@ -27,6 +27,7 @@
    (put! ch msg backpressure! nil)))
 
 (defn validating-fn
+  "Yield correct predicate based on assertion preference."
   [spec always-assert?]
   (if always-assert?
     (fn [x] (s/assert* spec x))
