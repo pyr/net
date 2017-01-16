@@ -271,6 +271,11 @@
   ([request-map]
    (request-chan (build-client {}) request-map)))
 
+(defn chunked?
+  "Predicate to determine whether a request is chunked?"
+  [request]
+  (instance? clojure.core.async.impl.protocols.Channel (:body request)))
+
 ;; Specs
 ;; =====
 
@@ -362,3 +367,7 @@
 (s/fdef build-client
         :args (s/cat :opts (s/nilable ::build-client-opts))
         :ret  ::client)
+
+(s/fdef chunked?
+        :args (s/cat :request ::request)
+        :ret  boolean?)
