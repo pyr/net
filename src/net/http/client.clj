@@ -1,10 +1,12 @@
 (ns net.http.client
   "Small wrapper around netty for HTTP clients."
-  (:require [net.codec.b64 :as b64]
-            [net.ssl       :as ssl]
-            [net.http      :as http]
+  (:require [net.codec.b64      :as b64]
+            [net.ssl            :as ssl]
+            [net.http           :as http]
+            [clojure.spec       :as s]
             [clojure.core.async :as async])
   (:import io.netty.bootstrap.Bootstrap
+           io.netty.channel.Channel
            io.netty.channel.ChannelHandlerContext
            io.netty.channel.ChannelHandlerAdapter
            io.netty.channel.ChannelInboundHandlerAdapter
@@ -68,7 +70,8 @@
         (callback)))))
 
 (defn ssl-ctx-handler
-  [ssl-ctx channel]
+  "Add an SSL context handler to a channel"
+  [ssl-ctx ^Channel channel]
   (.newHandler ssl-ctx (.alloc channel)))
 
 (defn request-initializer
@@ -85,19 +88,17 @@
          (.addLast pipeline "aggregator" (HttpObjectAggregator. (int max-body-size)))
          (.addLast pipeline "handler"    (netty-handler handler)))))))
 
-(def log-levels
-  {:debug LogLevel/DEBUG
-   :info  LogLevel/INFO
-   :warn  LogLevel/WARN})
-
 (defn data->version
+  ""
   [v]
-  (let [e (ex-info (str "invalid http version supplied: " v) {})]
+  (let [e (IllegalArgumentException. (str "invalid http version: " v))]
     (cond
       (nil? v)     HttpVersion/HTTP_1_1
+      (keyword? v) (recur (name v))
       (string? v)  (cond (re-matches #"(?i)http/1.1" v) HttpVersion/HTTP_1_1
                          (re-matches #"(?i)http/1.0" v) HttpVersion/HTTP_1_0
                          :else                          (throw e))
+      (instance? HttpVersion v) v
       :else        (throw e))))
 
 (defn data->method
@@ -113,6 +114,7 @@
                  :trace   HttpMethod/TRACE}
         e       (ex-info (str "invalid HTTP method supplied: " m) {})]
     (cond
+      (instance? HttpMethod m) m
       (keyword? m) (or (get methods m) (throw e))
       (string? m)  (or (get methods (-> m .toLowerCase keyword)) (throw e))
       (nil? m)     HttpMethod/GET
@@ -130,12 +132,15 @@
     (.set headers (name k) (str v))))
 
 (defn auth->headers
+  "If basic auth is present as a map within a request, add the
+   corresponding header."
   [headers {:keys [user password]}]
   (when (and user password)
     (.set headers "Authorization"
           (format "Basic %s" (b64/s->b64 (str user ":" password))))))
 
 (defn data->body
+  "Add body to a request"
   [request method body]
   (when body
     (let [headers (.headers request)
@@ -147,6 +152,7 @@
         (.set headers "Content-Length" (count body))))))
 
 (defn data->uri
+  ""
   [^URI uri query]
   (if (seq query)
     (let [qse (QueryStringEncoder. (str uri))]
@@ -159,6 +165,7 @@
     uri))
 
 (defn data->request
+  "Produce a valid request from a "
   [{:keys [body headers request-method version query uri auth]}]
   (let [uri     (data->uri uri query)
         version (data->version version)
@@ -172,6 +179,9 @@
     request))
 
 (defn build-client
+  "Create an http client instance. In most cases you will need only
+   one per JVM. You may need several if you want to operate under
+   different TLS contexts"
   ([]
    (build-client {}))
   ([{:keys [ssl] :as options}]
@@ -180,6 +190,10 @@
     :ssl-ctx (ssl/client-context ssl)}))
 
 (defn async-request
+  "Execute an asynchronous HTTP request, produce the response
+   asynchronously on the provided `handler` function.
+
+   If no client is provided, create one."
   ([request-map handler]
    (async-request (build-client {}) request-map handler))
   ([{:keys [group channel ssl-ctx max-size]} request-map handler]
@@ -203,6 +217,8 @@
      (-> ch .closeFuture .sync))))
 
 (defn request
+  "Execute a request against an asynchronous client. If no client exists, create one.
+   Waits for the response and returns it."
   ([request-map]
    (request (build-client {}) request-map))
   ([client request-map]
@@ -211,6 +227,8 @@
      (deref p))))
 
 (defn request-chan
+  "Execute a request against an asynchronous client and produce the response on
+   a promise channel."
   ([client request-map]
    (let [ch (async/promise-chan)]
      (try

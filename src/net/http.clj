@@ -31,6 +31,7 @@
            io.netty.handler.codec.http.HttpVersion
            io.netty.handler.codec.http.HttpObjectAggregator
            io.netty.handler.codec.http.QueryStringDecoder
+           io.netty.bootstrap.AbstractBootstrap
            io.netty.bootstrap.ServerBootstrap
            io.netty.buffer.Unpooled
            io.netty.buffer.ByteBuf
@@ -89,7 +90,7 @@
 
 (defn set-log-handler!
   "Add log hander to a bootstrap"
-  [^Bootstrap bootstrap {:keys [logging]}]
+  [^AbstractBootstrap bootstrap {:keys [logging]}]
   (let [handler (when-let [level (some-> logging keyword (get log-levels))]
                   (LoggingHandler. level))]
     (cond-> bootstrap  handler (.handler handler))))
