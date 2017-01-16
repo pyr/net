@@ -1,4 +1,5 @@
 (ns net.ty.pipeline
+  "Utilities to build and work with Netty pipelines"
   (:import java.util.concurrent.TimeUnit
            java.nio.ByteOrder
            io.netty.util.CharsetUtil
@@ -18,33 +19,60 @@
            io.netty.channel.socket.SocketChannel))
 
 (defprotocol HandlerAdapter
-  (capabilities [this])
-  (channel-active [this ctx])
-  (channel-inactive [this ctx])
-  (channel-registered [this ctx])
-  (channel-unregistered [this ctx])
-  (channel-read [this ctx input])
-  (channel-read-complete [this ctx])
-  (exception-caught [this ctx e])
-  (channel-writability-changed [this ctx])
-  (user-event-triggered [this ctx event])
-  (is-sharable? [this]))
+  "A protocol which mimicks netty's HandlerAdapter.
+   The capabilities signature expects a set of implemented methods."
+  (capabilities [this]
+    "Yields the set of implemented methods")
+  (channel-active [this ctx]
+    "Called when the channel becomes active")
+  (channel-inactive [this ctx]
+    "Called when the channel becomes inactive")
+  (channel-registered [this ctx]
+    "Called upon channel registration")
+  (channel-unregistered [this ctx]
+    "Called when channel is deregistered")
+  (channel-read [this ctx input]
+    "Called for each new payload on a channel")
+  (channel-read-complete [this ctx]
+    "Called when read has completed")
+  (exception-caught [this ctx e]
+    "Called for channel exceptions")
+  (channel-writability-changed [this ctx]
+    "Called when writability has changed on a channel")
+  (user-event-triggered [this ctx event]
+    "Called when a user event has been triggered on a channel")
+  (is-sharable? [this]
+    "Returns whether the handler adapter is sharable"))
 
-(def ^:dynamic *channel* nil)
+(def ^:dynamic *channel*
+  "Thread-local binding for a channel"
+  nil)
 
 (defn build-pipeline
+  "Build a pipeline from a list of handlers. Binds `*channel*` to
+   the given `chan` argument and runs through handlers.
+
+   When handlers are functions, call them with no arguments, otherwise
+   add them directly to the **ChannelHandler** list.
+
+   Yields an array of **ChannelHandler** instances"
   [handlers chan]
   (binding [*channel* chan]
     (into-array ChannelHandler (for [h handlers] (if (fn? h) (h) h)))))
 
 (defn channel-initializer
+  "Build a channel initializer from a pipeline, expressed as a
+   sequence of **ChannelHandler**, see `build-pipeline` for how
+   to express this."
   [pipeline]
   (proxy [ChannelInitializer] []
     (initChannel [^SocketChannel socket-channel]
       (.addLast (.pipeline socket-channel)
                 (build-pipeline pipeline socket-channel)))))
 
-(defmulti ^TimeUnit unit->time-unit class)
+(defmulti ^TimeUnit unit->time-unit
+  "Converts to a java util concurrent TimeUnit"
+  class)
 
 (defmethod unit->time-unit clojure.lang.Keyword
   [^clojure.lang.Keyword kw]
@@ -70,7 +98,7 @@
   [x]
   (throw (ex-info (format "Cannot convert from %s to TimeUnit" (class x)) {})))
 
-(defmulti ^CharsetUtil charset->charset-util class)
+(defmulti ^CharsetUtil charset->charset-util "converts to a CharsetUtil" class)
 
 (defmethod charset->charset-util clojure.lang.Keyword
   [^clojure.lang.Keyword kw]
@@ -96,6 +124,7 @@
   (throw (ex-info (format "Cannot convert from %s to CharsetUtil" (class x)) {})))
 
 (defn ^ChannelHandler read-timeout-handler
+  "Build a ChannelHandler which times-out when no payload is read"
   ([^Long timeout unit]
    (let [tu (unit->time-unit unit)]
      (fn [] (ReadTimeoutHandler. timeout tu))))
@@ -103,6 +132,7 @@
    (fn [] (ReadTimeoutHandler. timeout TimeUnit/SECONDS))))
 
 (defn ^ChannelHandler line-based-frame-decoder
+  "Builds a ChannelHandler which parses lines."
   ([]
    (fn [] (LineBasedFrameDecoder. (int 512))))
   ([^Long max-length]
@@ -116,6 +146,7 @@
      (fn [] (LineBasedFrameDecoder. max-length strip-delimiter? fail-fast?)))))
 
 (defn ^ChannelHandler line-frame-encoder
+  "Encode outbound payloads as lines, appending telnet-style carriage returns"
   ([]
    (proxy [MessageToMessageEncoder] []
      (isSharable []
@@ -124,6 +155,7 @@
        (.add out (str msg "\r\n"))))))
 
 (defmacro defencoder
+  "Define encoder"
   [sym [msg ctx shareable?] & body]
   `(defn ^ChannelHandler ~sym
      []
@@ -135,6 +167,7 @@
          (.add out# (do ~@body))))))
 
 (defmacro defdecoder
+  "Define decoders"
   [sym [msg ctx shareable?] & body]
   `(defn ^ChannelHandler ~sym
      []
@@ -145,7 +178,7 @@
        (decode [~ctx ~msg out#]
          (.add out# (do ~@body))))))
 
-(defmulti ->byte-order class)
+(defmulti ->byte-order "Concerts to a ByteOrder" class)
 
 (defmethod ->byte-order clojure.lang.Keyword
   [^clojure.lang.Keyword kw]
@@ -163,6 +196,7 @@
   bo)
 
 (defn ^ChannelHandler length-field-based-frame-decoder
+  "Create a length field based frame decoder."
   ([]
    (length-field-based-frame-decoder {}))
   ([{:keys [byte-order max offset length adjust strip fail-fast?]}]
@@ -178,6 +212,7 @@
                                       ff?)))))
 
 (defn ^ChannelHandler length-field-prepender
+  "Creates an encoder that adds length-fields"
   ([]
    (length-field-prepender {}))
   ([{:keys [length byte-order adjust includes-length?]}]
@@ -190,18 +225,22 @@
                               il?)))))
 
 (defn ^ChannelHandler string-decoder
+  "A decoder that coerces to string"
   ([]
    (StringDecoder. CharsetUtil/UTF_8))
   ([charset]
    (StringDecoder. (charset->charset-util charset))))
 
 (defn ^ChannelHandler string-encoder
+  "A encoder that coerces from strings"
   ([]
    (StringEncoder. CharsetUtil/UTF_8))
   ([charset]
    (StringEncoder. (charset->charset-util charset))))
 
 (defn make-handler-adapter
+  "From an implemenation of net.ty.pipeline.HandlerAdapater,
+   yield a proxied ChannelInboundHandlerAdapter."
   [adapter]
   (let [support? (set (capabilities adapter))]
     (proxy [ChannelInboundHandlerAdapter] []
@@ -235,18 +274,23 @@
         (is-sharable? adapter)))))
 
 (defn flush!
+  "Flush context"
   [^ChannelHandlerContext ctx]
   (.flush ctx))
 
 (defn write!
+  "Write message to context"
   [^ChannelHandlerContext ctx msg]
   (.write ctx msg))
 
 (defn write-and-flush!
+  "Write message to context, then flush context"
   [^ChannelHandlerContext ctx msg]
   (.writeAndFlush ctx msg))
 
 (defmacro with-input
+  "Inline definition of a **ChannelInboundHandlerAdapter** which
+   captures context and input and executes body."
   [[ctx input] & body]
   `(proxy [ChannelInboundHandlerAdapter] []
      (channelRead [^ChannelHandlerContext ~ctx ~input]

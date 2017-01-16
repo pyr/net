@@ -1,5 +1,8 @@
 (ns net.ty.buffer
-  (:require [clojure.tools.logging :refer [info debug]])
+  "Utility functions to build fixed size buffers.
+   These functions hold onto data and yield when
+   a specific size has been reached."
+  (:require [clojure.tools.logging :refer [debug]])
   (:import io.netty.buffer.Unpooled
            io.netty.handler.codec.http.DefaultHttpResponse
            io.netty.handler.codec.http.DefaultHttpContent
@@ -9,10 +12,12 @@
            io.netty.handler.codec.http.LastHttpContent))
 
 (defn buffer-holder
+  "Create a buffer holder (internally a volatile)."
   []
   (volatile! nil))
 
 (defn augment-buffer
+  "Add bytes to a buffer"
   ([dst src]
    (if (pos? (.capacity src))
      (.writeBytes dst src)
@@ -21,12 +26,15 @@
    (.writeBytes dst src (int len))))
 
 (defn new-buffer
+  "Create a new ByteBuf"
   ([max-size]
    (Unpooled/buffer (int (* 1024 1024)) (int max-size)))
   ([init-size max-size]
    (Unpooled/buffer (int init-size) (int max-size))))
 
 (defn update-content
+  "Add bytes to a buffer, outputs HttpContent instances containing
+   the expected size, or nothing."
   [max-size content msg]
   (locking content
     (let [buf    @content
@@ -35,12 +43,6 @@
           buf-sz (if buf (.writerIndex buf) 0)
           new-sz (+ buf-sz msg-sz)
           pad-sz (- max-size buf-sz)]
-      (debug "capacity held    :" (if buf (.capacity buf) 0))
-      (debug "index held       :" (if buf (.writerIndex buf) 0))
-      (debug "capacity provided:" (if msg-bb (.capacity msg-bb) 0))
-      (debug "buffer size now  :" buf-sz)
-      (debug "new size         :" new-sz)
-      (debug "pad size         :" (- max-size buf-sz))
       (cond
         (and (nil? buf) (= max-size msg-sz))
         (do
@@ -76,6 +78,8 @@
             (DefaultHttpContent. buf)))))))
 
 (defn release-contents
+  "Add bytes to a buffer, and then flush all output. Yields a vector
+  of HttpContent instances."
   [max-size content msg]
   (locking content
     (let [buf    @content
@@ -84,16 +88,9 @@
           buf-sz (if buf (.writerIndex buf) 0)
           new-sz (+ buf-sz msg-sz)
           pad-sz (- max-size buf-sz)]
-      (debug "capacity held    :" (if buf (.capacity buf) 0))
-      (debug "index held       :" (if buf (.writerIndex buf) 0))
-      (debug "capacity provided:" (if msg-bb (.capacity msg-bb) 0))
-      (debug "buffer size now  :" buf-sz)
-      (debug "new size         :" new-sz)
-      (debug "pad size         :" (- max-size buf-sz))
       (cond
         (nil? buf)
         (do
-          (debug "lonely http content")
           [(DefaultLastHttpContent. (Unpooled/copiedBuffer msg-bb))])
 
         (<= new-sz max-size)
@@ -111,6 +108,7 @@
 
 
 (defn last-http-content?
+  "Are we dealing with an instance of LastHttpContent"
   [msg]
   (let [has-interface? (-> msg .getClass supers set)]
     (has-interface? LastHttpContent)))

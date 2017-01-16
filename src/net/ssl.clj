@@ -15,9 +15,18 @@
            io.netty.handler.ssl.SslContextBuilder
            io.netty.handler.ssl.ClientAuth))
 
-(def ^:dynamic *storage* :guess)
+(def ^:dynamic *storage*
+  "Help net decide how to treat input. The default value
+   of `:guess` will treat string input as paths under 256
+   chars - a common value for **PATH_MAX** - and inlined
+   cert data above that.
+
+   A value of `:data` will always assume inlined certs,
+   and a value of `:file` will always assume paths."
+  :guess)
 
 (defn cert-string
+  "Convert input to certificate bytes"
   [input]
   (cond
     (and (map? input) (:path input))
@@ -35,6 +44,7 @@
     (= :data *storage*)
     input
 
+    ;; Assume `:guess` for storage
     (< (count input) 256)
     (slurp input)
 
@@ -42,12 +52,14 @@
     input))
 
 (defn cert-bytes
+  "Get certificate bytes out of an input."
   [input]
   (if (instance? (Class/forName "[B") input)
     input
     (.getBytes (cert-string input))))
 
 (defn ^X509Certificate s->cert
+  "Generate an X509 from a given source."
   [factory input]
   (.generateCertificate factory (ByteArrayInputStream. (cert-bytes input))))
 
@@ -62,6 +74,7 @@
     (.generatePrivate factory kspec)))
 
 (defn ->chain
+  "Get a certificate chain out of several certificate specs"
   [^CertificateFactory fact cert-spec]
   (if (sequential? cert-spec)
     (into-array X509Certificate (map (partial s->cert fact) cert-spec))
@@ -124,6 +137,9 @@
       (.build builder))))
 
 (defn ^clojure.lang.IFn handler-fn
+  "Build a handler function to be used in netty pipelines out of an SSL context.
+   Will yield a 1-arity function of a context and a 3-arity function of a
+   context, a host, and a port which will add a handler to the context."
   ([^SslContext ctx host port]
    (fn ^ChannelHandler make-handler []
      (.newHandler ctx (.alloc *channel*) host port)))

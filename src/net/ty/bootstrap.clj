@@ -58,10 +58,12 @@
 (def nio-datagram-channel      NioDatagramChannel)
 
 (defn nio-event-loop-group
+  "Yield a new NioEventLoopGroup"
   []
   (NioEventLoopGroup.))
 
 (defn ^ServerBootstrap server-bootstrap
+  "Build a server bootstrap from a configuration map"
   [config]
   (when-not (s/valid? ::server-bootstrap-schema config)
     (throw (IllegalArgumentException. "invalid server bootstrap configuration")))
@@ -80,6 +82,7 @@
     (.validate bs)))
 
 (defn ^Bootstrap bootstrap
+  "Build a client bootstrap from a configuration map"
   [config]
   (when-not (s/valid? ::bootstrap-schema config)
     (println (s/explain-out (s/explain-data ::bootstrap-schema config)))
@@ -97,20 +100,26 @@
     (.validate bs)))
 
 (defn sync!
+  "Synchronize bootstrap"
   [^AbstractBootstrap bs]
   (.sync bs))
 
 (defn bind!
+  "Bind bootstrap to a host and port"
   [^ServerBootstrap bs ^String host ^Long port]
   (.bind bs host (int port)))
 
 (defn remote-address!
+  "Set remote address for a client bootstrap, allows host and port
+   to be provided as a SocketAddress"
   ([bs ^SocketAddress sa]
    (.remoteAddress bs sa))
   ([bs host ^Long port]
    (.remoteAddress bs host (int port))))
 
 (defn connect!
+  "Attempt connection of a bootstrap. Accepts as pre-configured bootstrap,
+   and optionally a SocketAddressor Host and Port."
   ([bs]
    (.connect bs))
   ([bs ^SocketAddress sa]
@@ -119,30 +128,37 @@
    (.connect bs x y)))
 
 (defn local-address!
+  "Sets the bootstrap's local address. Accepts either a SocketAddress or
+   Host and Port."
   ([bs x]
    (.localAddress bs x))
   ([bs x y]
    (.localAddress bs x y)))
 
 (defn validate!
+  "Validate that a bootstrap has correct parameters."
   ([bs]
    (.validate bs)))
 
 (defn set-group!
+  "Set the group on top of which channels will be created and then handled."
   [bs group]
   (.group bs group))
 
 (defn shutdown-gracefully!
+  "Gracefully shut down a group"
   [group]
   (.shutdownGracefully group))
 
 (defn shutdown-fn
+  "Closure to shutdown a channel and associated group"
   [chan group]
   (fn []
     (chan/close! chan)
     (shutdown-gracefully! group)))
 
 (defn set-child-handler!
+  "A server bootstrap has a child handler, this methods helps set it"
   [bootstrap handler]
   (.childHandler bootstrap handler))
 

@@ -1,5 +1,7 @@
 (ns net.core.async
-  "Shamelessly stolen from @mpenet's jet,
+  "Small extensions and improvements on top of core.async
+
+   Some bits shamelessly stolen from @mpenet's jet,
    See https://github.com/mpenet/jet for original"
   (:require [clojure.core.async :as async]
             [clojure.spec       :as s]))
