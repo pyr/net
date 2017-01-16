@@ -145,8 +145,8 @@
       (string? m)              (or (get http-methods kw) (throw e))
       :else                    (throw e))))
 
-(defn data->headers
-  [headers input host]
+(defn ^HttpHeaders data->headers
+  [^HttpHeaders headers input ^String host]
   (when-not (or (empty? input) (map? input))
     (throw (ex-info "HTTP headers should be supplied as a map" {})))
   (.set headers "host" host)
@@ -154,7 +154,8 @@
                 (get headers "connection"))
     (.set headers "connection" "close"))
   (doseq [[k v] input]
-    (.set headers (name k) (str v))))
+    (.set headers (name k) (str v)))
+  headers)
 
 (defn auth->headers
   "If basic auth is present as a map within a request, add the
@@ -162,7 +163,8 @@
   [headers {:keys [user password]}]
   (when (and user password)
     (.set headers "Authorization"
-          (format "Basic %s" (b64/s->b64 (str user ":" password))))))
+          (format "Basic %s" (b64/s->b64 (str user ":" password)))))
+  headers)
 
 (defn data->body
   "Add body to a request"
@@ -176,7 +178,7 @@
       (when-not (.get headers "Content-Length")
         (.set headers "Content-Length" (count body))))))
 
-(defn data->uri
+(defn ^URI data->uri
   "Produce a valid URI from arguments found in a request map"
   [^URI uri query]
   (if (seq query)
@@ -210,9 +212,10 @@
   ([]
    (build-client {}))
   ([{:keys [ssl] :as options}]
-   {:channel (http/optimal-client-channel)
-    :group   (http/make-boss-group options)
-    :ssl-ctx (ssl/client-context ssl)}))
+   (let [disable-epoll? (-> options :disable-epoll boolean)]
+     {:channel (http/optimal-client-channel disable-epoll?)
+      :group   (http/make-boss-group options)
+      :ssl-ctx (ssl/client-context ssl)})))
 
 (defn async-request
   "Execute an asynchronous HTTP request, produce the response
@@ -316,3 +319,46 @@
 (s/def ::request (s/keys
                   :req-un [::uri]
                   :opt-un [::request-method ::body ::version ::query ::auth]))
+
+;;
+(s/def ::build-client-opts
+  (s/keys :opt-un [::ssl ::http/loop-thread-count
+                   ::http/disable-epoll]))
+
+(s/def ::client
+  (s/keys :req-un [::channel ::group ::ssl-ctx]))
+
+(s/fdef data->request
+        :args (s/cat :request ::request)
+        :ret #(instance? HttpRequest %))
+
+(s/fdef string->version
+        :args (s/cat :version string? :e #(instance? Exception %))
+        :ret  #(instance? HttpVersion %))
+
+(s/fdef data->version
+        :args (s/cat :version (s/nilable ::version))
+        :ret  #(instance? HttpVersion %))
+
+(s/fdef data->method
+        :args (s/cat :method (s/nilable ::request-method))
+        :ret  #(instance? HttpMethod %))
+
+(s/fdef data->uri
+        :args (s/cat :uri #(instance? URI %) :query (s/nilable ::query))
+        :ret  #(instance? URI %))
+
+(s/fdef data->headers
+        :args (s/cat :headers #(instance? HttpHeaders %)
+                     :input (s/nilable ::headers)
+                     :host string?)
+        :ret  #(instance? HttpHeaders %))
+
+(s/fdef auth->headers
+        :args (s/cat :headers #(instance? HttpHeaders %)
+                     :auth   (s/nilable ::auth))
+        :ret #(instance? HttpHeaders %))
+
+(s/fdef build-client
+        :args (s/cat :opts (s/nilable ::build-client-opts))
+        :ret  ::client)
