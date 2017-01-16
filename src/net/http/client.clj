@@ -88,37 +88,62 @@
          (.addLast pipeline "aggregator" (HttpObjectAggregator. (int max-body-size)))
          (.addLast pipeline "handler"    (netty-handler handler)))))))
 
+(def http-versions
+  "Keyword HTTP versions"
+  {:http-1-1 HttpVersion/HTTP_1_1
+   :http-1-0 HttpVersion/HTTP_1_0})
+
+(defn string->version
+  "When possible, get appropriate HttpVersion from a string.
+   Throws when impossible."
+  [^String s ^Exception e]
+  (cond
+    (re-matches #"(?i)http/1.1" s) HttpVersion/HTTP_1_1
+    (re-matches #"(?i)http/1.0" s) HttpVersion/HTTP_1_0
+    :else                          (throw e)))
+
 (defn data->version
-  ""
+  "Get appropriate HttpVersion from a number of possible inputs.
+   Defaults to HTTP/1.1 when nil, translate known keywords and
+   strings or pass an HttpVersion through.
+
+   Throws on other values."
   [v]
   (let [e (IllegalArgumentException. (str "invalid http version: " v))]
     (cond
-      (nil? v)     HttpVersion/HTTP_1_1
-      (keyword? v) (recur (name v))
-      (string? v)  (cond (re-matches #"(?i)http/1.1" v) HttpVersion/HTTP_1_1
-                         (re-matches #"(?i)http/1.0" v) HttpVersion/HTTP_1_0
-                         :else                          (throw e))
+      (nil? v)                  HttpVersion/HTTP_1_1
+      (keyword? v)              (or (get http-versions v) (throw e))
+      (string? v)               (string->version v e)
       (instance? HttpVersion v) v
-      :else        (throw e))))
+      :else                     (throw e))))
+
+(def http-methods
+  "Keyword HTTP methods"
+  {:connect HttpMethod/CONNECT
+   :delete  HttpMethod/DELETE
+   :get     HttpMethod/GET
+   :head    HttpMethod/HEAD
+   :options HttpMethod/OPTIONS
+   :patch   HttpMethod/PATCH
+   :post    HttpMethod/POST
+   :put     HttpMethod/PUT
+   :trace   HttpMethod/TRACE})
 
 (defn data->method
+  "Get appropriate HttpMethod from a number of possible inputs.
+   Defaults to GET when nil, translate known keywords and strings,
+   or pass a HttpMethod through.
+
+   Throws on other values."
   [m]
-  (let [methods {:connect HttpMethod/CONNECT
-                 :delete  HttpMethod/DELETE
-                 :get     HttpMethod/GET
-                 :head    HttpMethod/HEAD
-                 :options HttpMethod/OPTIONS
-                 :patch   HttpMethod/PATCH
-                 :post    HttpMethod/POST
-                 :put     HttpMethod/PUT
-                 :trace   HttpMethod/TRACE}
-        e       (ex-info (str "invalid HTTP method supplied: " m) {})]
+  (let [e  (IllegalArgumentException. (str "invalid http method: " m))
+        kw (when (string? m) (-> m .toLowerCase keyword))]
     (cond
       (instance? HttpMethod m) m
-      (keyword? m) (or (get methods m) (throw e))
-      (string? m)  (or (get methods (-> m .toLowerCase keyword)) (throw e))
-      (nil? m)     HttpMethod/GET
-      :else        (throw e))))
+      (nil? m)                 HttpMethod/GET
+      (keyword? m)             (or (get http-methods m) (throw e))
+      (string? m)              (or (get http-methods kw) (throw e))
+      :else                    (throw e))))
 
 (defn data->headers
   [headers input host]
@@ -152,7 +177,7 @@
         (.set headers "Content-Length" (count body))))))
 
 (defn data->uri
-  ""
+  "Produce a valid URI from arguments found in a request map"
   [^URI uri query]
   (if (seq query)
     (let [qse (QueryStringEncoder. (str uri))]
@@ -242,3 +267,52 @@
      ch))
   ([request-map]
    (request-chan (build-client {}) request-map)))
+
+;; Specs
+;; =====
+
+;; The URI is the only required part of a request map, if it
+;; is a string, it will be parsed to a URI.
+
+(s/def ::uri (s/or :uri #(instance? java.net.URI %) :string string?))
+
+;; We parse request methods liberally, they may be
+;; a string, keyword or a Netty HttpMethod instance.
+;; A nil request method implies GET.
+
+(def method-re #"(?i)^(connect|delete|get|head|options|patch|post|put|trace)$")
+
+(s/def ::keyword-method #{:connect :delete :get :head :options
+                          :patch :post :put :trace})
+(s/def ::string-method  #(re-matches method-re %))
+(s/def ::request-method (s/or :keyword ::keyword-method
+                              :string  ::string-method
+                              :method  #(instance? HttpMethod %)))
+
+;; Version specifications are also parsed loosely.
+;; nil versions mean HTTP 1.1, strings, keywords and HttpVersion instances
+;; are also allowed.
+
+(def version-re #"(?i)^http/1.[01]$")
+
+(s/def ::version (s/or :keyword #{:http-1-1 :http-1-0}
+                       :string  (s/and string? #(re-matches version-re %))
+                       :version #(instance? HttpVersion %)))
+
+;; Query args are maps of keyword or string to anything.
+;; When values are sequential, arguments are looped over. Any other
+;; value is coerced to a string.
+
+(s/def ::query (s/map-of (s/or :keyword keyword? :string string?) any?))
+
+;; When auth is present, it should be a map of `:user` and `:password`.
+
+(s/def ::user string?)
+(s/def ::password string?)
+(s/def ::auth (s/keys :req-un [::user ::password]))
+
+;; Bring everything together in our request map
+
+(s/def ::request (s/keys
+                  :req-un [::uri]
+                  :opt-un [::request-method ::body ::version ::query ::auth]))

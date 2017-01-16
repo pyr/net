@@ -1,7 +1,8 @@
 (ns net.core.async
   "Shamelessly stolen from @mpenet's jet,
    See https://github.com/mpenet/jet for original"
-  (:require [clojure.core.async :as async]))
+  (:require [clojure.core.async :as async]
+            [clojure.spec       :as s]))
 
 (defn put!
   "Takes a `ch`, a `msg`, a single arg function that when passed
@@ -48,10 +49,10 @@
 
    The 1-arity version produces nil on the chan in case of errors."
   ([spec error-value always-assert?]
-   (a/promise-chan (map (validating-fn spec always-assert?))
-                   (fn [_] (if (fn? error-value)
-                             (error-value)
-                             error-value))))
+   (async/promise-chan (map (validating-fn spec always-assert?))
+                       (fn [_] (if (fn? error-value)
+                                (error-value)
+                                error-value))))
   ([spec error-value]
    (validating-promise-chan spec error-value false))
   ([spec]
@@ -72,10 +73,10 @@
 
    The 1-arity version produces nil on the chan in case of errors."
   ([spec buf-or-n error-value always-assert?]
-   (a/chan buf-or-n (map (validating-fn spec always-assert?))
-           (fn [_] (if (fn? error-value)
-                     (error-value)
-                     error-value))))
+   (async/chan buf-or-n (map (validating-fn spec always-assert?))
+               (fn [_] (if (fn? error-value)
+                        (error-value)
+                        error-value))))
   ([spec buf-or-n error-value]
    (validating-chan spec buf-or-n error-value false))
   ([spec buf-or-n]
