@@ -4,9 +4,10 @@
   :license {:name "MIT License"
             :url  "https://github.com/pyr/net/tree/master/LICENSE"}
   :plugins [[lein-codox "0.10.2"]]
-  :codox {:source-uri "https://github.com/pyr/unilog/blob/{version}/{filepath}#L{line}"
-          :namespaces [#"^net"]
-          :metadata   {:doc/format :markdown}}
+  :codox {:source-uri  "https://github.com/pyr/unilog/blob/{version}/{filepath}#L{line}"
+          :output-path "docs"
+          :namespaces  [#"^net"]
+          :metadata    {:doc/format :markdown}}
   :profiles {:dev {:resource-paths ["test/resources"]
                    :source-paths   ["examples"]
                    :main           webfile.server
