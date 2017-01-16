@@ -7,6 +7,7 @@
   :codox {:source-uri  "https://github.com/pyr/unilog/blob/{version}/{filepath}#L{line}"
           :output-path "docs"
           :namespaces  [#"^net"]
+          :doc-files   ["examples/guides/guide.md"]
           :metadata    {:doc/format :markdown}}
   :profiles {:dev {:resource-paths ["test/resources"]
                    :source-paths   ["examples"]
