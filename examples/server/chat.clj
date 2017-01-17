@@ -7,20 +7,17 @@
   [channel-group]
   (reify
     pipeline/HandlerAdapter
-    (is-sharable? [this]
-      true)
-    (capabilities [this]
-      #{:channel-active :channel-read})
-    (channel-active [this ctx]
-      (channel/add-to-group channel-group (channel/channel ctx))
-      (channel/write-and-flush! ctx "welcome to the chat"))
     (channel-read [this ctx msg]
       (if (= msg "quit")
         (do (channel/write-and-flush! ctx "bye!")
             (channel/close! ctx))
         (let [src (channel/channel ctx)]
           (doseq [dst channel-group :when (not= dst src)]
-            (channel/write-and-flush! dst msg)))))))
+            (channel/write-and-flush! dst msg)))))
+    pipeline/ChannelActive
+    (channel-active [this ctx]
+      (channel/add-to-group channel-group (channel/channel ctx))
+      (channel/write-and-flush! ctx "welcome to the chat"))))
 
 (defn pipeline
   []

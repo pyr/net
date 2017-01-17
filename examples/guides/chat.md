@@ -55,31 +55,26 @@ as input.
   [channel-group]
   (reify
     pipeline/HandlerAdapter
-	
-    (is-sharable? [this] true)
-    (capabilities [this] #{:channel-active :channel-read})
-	
-    (channel-active [this ctx]
-      (channel/add-to-group channel-group (channel/channel ctx))
-      (channel/write-and-flush! ctx "welcome to the chat"))
-	  
     (channel-read [this ctx msg]
       (if (= msg "quit")
         (do (channel/write-and-flush! ctx "bye!")
             (channel/close! ctx))
         (let [src (channel/channel ctx)]
           (doseq [dst channel-group :when (not= dst src)]
-            (channel/write-and-flush! dst msg)))))))
+            (channel/write-and-flush! dst msg)))))
+
+    pipeline/ChannelActive
+    (channel-active [this ctx]
+      (channel/add-to-group channel-group (channel/channel ctx))
+      (channel/write-and-flush! ctx "welcome to the chat"))))
 ```
 
 Let's walk through the above. We start by producing
 an anonymous realization of the  [`HandlerAdapter`](/net.ty.pipeline.html#var-HandlerAdapter)
-protocol with `reify`.
+protocol with `reify`, adding the `ChannelActive` protocol as well.
 
-We will implement four signatures of this protocol:
+We implement the following signatures:
 
-- `is-sharable?`: used as a predicate to determine if the adapter is reentrant.
-- `capabilities`: used to determine which signatures are implemented.
 - `channel-active`: called when a new connection is registered.
 - `channel-read`: called for each new payload.
 
@@ -101,9 +96,6 @@ adapter as well:
   []
   (reify
     pipeline/HandlerAdapter
-	(is-sharable? [this] true)
-	(capabilities [this] #{:channel-read})
-
 	(channel-read [this ctx msg] (channel/write-and-flush! ctx msg))))
 ```
 

@@ -19,30 +19,68 @@
            io.netty.channel.socket.SocketChannel))
 
 (defprotocol HandlerAdapter
-  "A protocol which mimicks netty's HandlerAdapter.
-   The capabilities signature expects a set of implemented methods."
-  (capabilities [this]
-    "Yields the set of implemented methods")
-  (channel-active [this ctx]
-    "Called when the channel becomes active")
-  (channel-inactive [this ctx]
-    "Called when the channel becomes inactive")
-  (channel-registered [this ctx]
-    "Called upon channel registration")
-  (channel-unregistered [this ctx]
-    "Called when channel is deregistered")
+  "This is the minimum an adapter must implement to be proxied
+   to a valid ChannelHandlerAdapter"
   (channel-read [this ctx input]
-    "Called for each new payload on a channel")
-  (channel-read-complete [this ctx]
-    "Called when read has completed")
-  (exception-caught [this ctx e]
-    "Called for channel exceptions")
-  (channel-writability-changed [this ctx]
-    "Called when writability has changed on a channel")
-  (user-event-triggered [this ctx event]
-    "Called when a user event has been triggered on a channel")
+    "Called for each new payload on a channel"))
+
+(defprotocol IsSharable
+  "Implement this protocol for adapters when you want to report
+   whether the adapter can be shared or not. When not implemented
+   adapters will be deemed unsharable.
+
+   While it may look more natural to write sharable as shareable,
+   it is apparently valid english and is the way netty spells it out."
   (is-sharable? [this]
     "Returns whether the handler adapter is sharable"))
+
+(defprotocol ChannelActive
+  "Implement this protocol when you want your adapter to be
+   notified for channel activation."
+  (channel-active [this ctx]
+    "Called when the channel becomes active"))
+
+(defprotocol ChannelInactive
+  "Implement this protocol when you want your adapter to be
+   notified for channel deactivation."
+  (channel-inactive [this ctx]
+    "Called when the channel becomes inactive"))
+
+(defprotocol ChannelRegistered
+  "Implement this protocol when you want your adapter to be
+   notified for channel registration."
+  (channel-registered [this ctx]
+    "Called upon channel registration"))
+
+(defprotocol ChannelUnregistered
+  "Implement this protocol when you want your adapter to be
+   notified for channel deregistration."
+  (channel-unregistered [this ctx]
+    "Called when channel is deregistered"))
+
+(defprotocol ChannelReadComplete
+  "Implement this protocol when you want your adapter to be
+   notified of a read complete status."
+  (channel-read-complete [this ctx]
+    "Called when read has completed"))
+
+(defprotocol ExceptionCaught
+  "Implement this protocol when you want your adapter to be
+   notified of channel exception."
+  (exception-caught [this ctx e]
+    "Called for channel exceptions"))
+
+(defprotocol ChannelWritabilityChanged
+  "Implement this protocol when you want your adapter to be
+   notified of changes in channel writability."
+  (channel-writability-changed [this ctx]
+    "Called when writability has changed on a channel"))
+
+(defprotocol UserEventTriggered
+  "Implement this protocol when you want your adapter to be
+   notified of user events."
+  (user-event-triggered [this ctx event]
+    "Called when a user event has been triggered on a channel"))
 
 (def ^:dynamic *channel*
   "Thread-local binding for a channel"
@@ -240,38 +278,48 @@
 
 (defn make-handler-adapter
   "From an implemenation of net.ty.pipeline.HandlerAdapater,
-   yield a proxied ChannelInboundHandlerAdapter."
+   yield a proxied ChannelInboundHandlerAdapter.
+
+   Adapters may optionally implement any or all of the following
+   protocols: `IsSharable`, `ChannelActive`, `ChannelInactive`,
+   `ChannelReadComplete`, `ChannelRegistered`, `ChannelUnregistered`,
+   `ExceptionCaught`, `ChannelWritabilityChanged`, and
+   `UserEventTriggered`."
   [adapter]
-  (let [support? (set (capabilities adapter))]
-    (proxy [ChannelInboundHandlerAdapter] []
-      (channelActive [^ChannelHandlerContext ctx]
-        (when (support? :channel-active)
-          (channel-active adapter ctx)))
-      (channelInactive [^ChannelHandlerContext ctx]
-        (when (support? :channel-inactive)
-          (channel-inactive adapter ctx)))
-      (channelRead [^ChannelHandlerContext ctx input]
-        (channel-read adapter ctx input))
-      (channelReadComplete [^ChannelHandlerContext ctx]
-        (when (support? :channel-read-complete)
-          (channel-read-complete adapter ctx)))
-      (channelRegistered [^ChannelHandlerContext ctx]
-        (when (support? :channel-registered)
-          (channel-registered adapter ctx)))
-      (channelUnregistered [^ChannelHandlerContext ctx]
-        (when (support? :channel-unregistered)
-          (channel-unregistered adapter ctx)))
-      (exceptionCaught [^ChannelHandlerContext ctx ^Throwable e]
-        (when (support? :exception-caught)
-          (exception-caught adapter ctx e)))
-      (channelWritabilityChanged [^ChannelHandlerContext ctx]
-        (when (support? :channel-writability-changed)
-          (channel-writability-changed adapter ctx)))
-      (userEventTriggered [^ChannelHandlerContext ctx event]
-        (when (support? :user-event-triggered)
-          (user-event-triggered adapter ctx event)))
-      (isSharable []
-        (is-sharable? adapter)))))
+  (when-not (satisfies? HandlerAdapter adapter)
+    (throw (IllegalArgumentException.
+            "adapters must implement HandlerAdapter")))
+  (proxy [ChannelInboundHandlerAdapter] []
+    (channelRead [^ChannelHandlerContext ctx input]
+      (channel-read adapter ctx input))
+    (isSharable []
+      (boolean
+       (or (not (satisfies? IsSharable adapter))
+           (is-sharable? adapter))))
+    (channelActive [^ChannelHandlerContext ctx]
+      (when (satisfies? ChannelActive adapter)
+        (channel-active adapter ctx)))
+    (channelInactive [^ChannelHandlerContext ctx]
+      (when (satisfies? ChannelInactive adapter)
+        (channel-inactive adapter ctx)))
+    (channelReadComplete [^ChannelHandlerContext ctx]
+      (when (satisfies? ChannelReadComplete adapter)
+        (channel-read-complete adapter ctx)))
+    (channelRegistered [^ChannelHandlerContext ctx]
+      (when (satisfies? ChannelRegistered adapter)
+        (channel-registered adapter ctx)))
+    (channelUnregistered [^ChannelHandlerContext ctx]
+      (when (satisfies? ChannelUnregistered adapter)
+        (channel-unregistered adapter ctx)))
+    (exceptionCaught [^ChannelHandlerContext ctx ^Throwable e]
+      (when (satisfies? ExceptionCaught adapter)
+        (exception-caught adapter ctx e)))
+    (channelWritabilityChanged [^ChannelHandlerContext ctx]
+      (when (satisfies? ChannelWritabilityChanged)
+        (channel-writability-changed adapter ctx)))
+    (userEventTriggered [^ChannelHandlerContext ctx event]
+      (when (satisfies? UserEventTriggered)
+        (user-event-triggered adapter ctx event)))))
 
 (defn flush!
   "Flush context"
