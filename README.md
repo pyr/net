@@ -21,13 +21,23 @@ and nothing but standard clojure facilities.
 - Simple interface to create TCP server with optional TLS support
 - Clojure [core.async](https://github.com/clojure/core.async) support
 
+## Documentation
+
+Net now has full [API Documentation](http://pyr.github.io/net) and
+[Guides](http://pyr.github.io/net/intro.html).
+
 ## Installation
 
 ```clojure
-    [[spootnik/net "0.3.3-beta1"]]
+    [[spootnik/net "0.3.3-beta2"]]
 ```
 
 ## Changelog
+
+### 0.3.3-beta2
+
+- Add documentation and guides
+- Improved specs
 
 ### 0.3.3-beta1
 
