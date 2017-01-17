@@ -29,10 +29,14 @@ Net now has full [API Documentation](http://pyr.github.io/net) and
 ## Installation
 
 ```clojure
-    [[spootnik/net "0.3.3-beta2"]]
+    [[spootnik/net "0.3.3-beta3"]]
 ```
 
 ## Changelog
+
+### 0.3.3-beta3
+
+- Break `HandlerAdapter` into several protocols
 
 ### 0.3.3-beta2
 
