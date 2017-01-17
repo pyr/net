@@ -41,10 +41,10 @@ of the `java.nio` subsystem, which allows calling `select` on a
 
 Most programming platforms extend this programming model to provide an
 *event loop*: A mechanism to register callbacks associated with I/O
-event.
+events.
 
 The downside of asynchronous programming is that it is up to the
-programmer to keep track of the current state of a connection. Since
+programmer to keep track of the current state of a connection, since
 I/O is decoupled from processing. This can be done through the use of
 *finite state machines*, commonly used in asynchronous programming.
 When working with event loops, this involves registering callbacks for
@@ -71,7 +71,8 @@ waiting for results:
 
 (defn send-xhr [url]
   (let [p (promise-chan)]
-     (.send xhr url (fn [response] (put! p response)))))
+     (.send xhr url (fn [response] (put! p response)))
+     p))
 	 
 (go
   (let [resp (<! (send-xhr "http://spootnik.org"))]
@@ -97,7 +98,7 @@ Incoming commands take the form <opcode>:
 
 ```
 "start-engine"
-"stop-enginer"
+"stop-engine"
 "thrust-engine"
 ```
 
@@ -142,7 +143,7 @@ To build an appropriate pipeline, we will need:
 |                          |
 +--------------------------+
 ```
-                      
+
 Netty provides simple facilities to create this layered approach,
 allowing library consumers to plug-in their logic handling code
 without worrying about handling low-level payload handling code.
@@ -152,10 +153,10 @@ a thread-pool to execute handler callbacks, separating threads
 dedicated to I/O waiting from threads dedicated to processing.
 
 While avoiding the expensive model of reserving one thread
-per connection, this allows for scalable handling of large
+per connection, this allows for scalable handling of a large
 number of connections.
 
-As a thing wrapper on top of Netty, net provides Clojure facilities to
+As a thin wrapper on top of Netty, net provides Clojure facilities to
 build these handling pipelines in - hopefully - idiomatic clojure.
 For a more all-encompassing framework on top of Netty, readers are
 encouraged to also consider [aleph](http://aleph.io). Net aims to

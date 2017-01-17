@@ -1,6 +1,6 @@
 # An echo server
 
-Our first and most simple example is an echo server.
+Our first and simplest example is an echo server.
 Each incoming payload is repeated.
 
 Our protocol will be simple and limited:

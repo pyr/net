@@ -16,8 +16,8 @@
 <p>Handle each client in a separate thread - or processus as was standard on UNIX platforms - reaches system limits quite easily. The JVM incurs a penalty for each created thread and the thread scheduler is not meant to efficiently manage thousand or millions of threads.</p>
 <p>Some <a href="http://erlang.org">platforms</a> have been specifically built to permit this programming approach for large number of clients, through the use of low-cost lightweight threads.</p>
 <p>Asynchronous programming allows waiting for I/O on several operations at once, and being signalled of I/O events. In C, this is what the <code>select</code> and <code>poll</code> system calls provide. On the JVM, this is the role of the <code>java.nio</code> subsystem, which allows calling <code>select</code> on a <code>selector</code>.</p>
-<p>Most programming platforms extend this programming model to provide an <em>event loop</em>: A mechanism to register callbacks associated with I/O event.</p>
-<p>The downside of asynchronous programming is that it is up to the programmer to keep track of the current state of a connection. Since I/O is decoupled from processing. This can be done through the use of <em>finite state machines</em>, commonly used in asynchronous programming. When working with event loops, this involves registering callbacks for events. Here is a canonical example on top of Javascript:</p>
+<p>Most programming platforms extend this programming model to provide an <em>event loop</em>: A mechanism to register callbacks associated with I/O events.</p>
+<p>The downside of asynchronous programming is that it is up to the programmer to keep track of the current state of a connection, since I/O is decoupled from processing. This can be done through the use of <em>finite state machines</em>, commonly used in asynchronous programming. When working with event loops, this involves registering callbacks for events. Here is a canonical example on top of Javascript:</p>
 <pre><code>(def xhr goog.net.XhrIo)
 
 (.send xhr "http://spootnik.org" (fn [response] (handle-body response)))
@@ -28,7 +28,8 @@
 
 (defn send-xhr [url]
   (let [p (promise-chan)]
-     (.send xhr url (fn [response] (put! p response)))))
+     (.send xhr url (fn [response] (put! p response)))
+     p))
 	 
 (go
   (let [resp (&lt;! (send-xhr "http://spootnik.org"))]
@@ -39,7 +40,7 @@
 <p>Let’s consider the case of a simple RPC server. The service is exposed over TLS and the protocol follows the standard telnet CRLF line-based frames protocol.</p>
 <p>Incoming commands take the form <opcode>:</opcode></p>
 <pre><code>"start-engine"
-"stop-enginer"
+"stop-engine"
 "thrust-engine"
 </code></pre>
 <p>Responses may be either <code>OK</code> or <code>ERR &lt;message&gt;</code>.</p>
@@ -82,8 +83,8 @@
 </code></pre>
 <p>Netty provides simple facilities to create this layered approach, allowing library consumers to plug-in their logic handling code without worrying about handling low-level payload handling code.</p>
 <p>In addition to this simple programming layer, Netty also handles a thread-pool to execute handler callbacks, separating threads dedicated to I/O waiting from threads dedicated to processing.</p>
-<p>While avoiding the expensive model of reserving one thread per connection, this allows for scalable handling of large number of connections.</p>
-<p>As a thing wrapper on top of Netty, net provides Clojure facilities to build these handling pipelines in - hopefully - idiomatic clojure. For a more all-encompassing framework on top of Netty, readers are encouraged to also consider <a href="http://aleph.io">aleph</a>. Net aims to provide thin wrapping for people familiar with netty and happy to work mostly with <a href="https://github.com/clojure/core.async">core.async</a> as their asynchronous channel interface.</p>
+<p>While avoiding the expensive model of reserving one thread per connection, this allows for scalable handling of a large number of connections.</p>
+<p>As a thin wrapper on top of Netty, net provides Clojure facilities to build these handling pipelines in - hopefully - idiomatic clojure. For a more all-encompassing framework on top of Netty, readers are encouraged to also consider <a href="http://aleph.io">aleph</a>. Net aims to provide thin wrapping for people familiar with netty and happy to work mostly with <a href="https://github.com/clojure/core.async">core.async</a> as their asynchronous channel interface.</p>
 <p>Now that you hopefully have a better idea of each foundation net builds on top of, you can look at how to build servers and clients with it. Here are a few additional walk-through guides:</p>
 <ul>
   <li><a href="echo.html">An echo server</a></li>

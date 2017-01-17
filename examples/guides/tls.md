@@ -18,7 +18,7 @@ We only need an additional dependency when creating our namespace:
   (:require [net.ty.channel  :as channel]
             [net.ty.pipeline :as pipeline]
             [net.ssl         :as ssl]
-			[net.tcp         :as tcp]))
+            [net.tcp         :as tcp]))
 ```
 
 We now need to build an **SSL Context** for Netty to use:
@@ -29,7 +29,7 @@ We now need to build an **SSL Context** for Netty to use:
   (let [root-dir (System/getenv "ECHO_CERT_DIR")]
     (ssl/server-context
       {:pkey (str root-dir "/echo.pkey.p8")
-	   :cert (str root-dir "/echo.cert.pem")})))
+       :cert (str root-dir "/echo.cert.pem")})))
 ```
 
 In the above, we create an **SSL Context** for a given

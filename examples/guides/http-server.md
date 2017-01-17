@@ -5,7 +5,7 @@ prior exposure to [ring](https://github.com/ring-clojure/ring1) and [jet](https:
 
 It differs in the following important ways:
 
-- The body of the ring request handlers are fed may be a
+- The body of the ring request passed to handlers may be a
   [core.async](https://github.com/clojure/core.async) channel, in
   which case it will produce a list of chunks for the body.
 - Handlers may return a
