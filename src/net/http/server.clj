@@ -447,7 +447,7 @@
        (let [bootstrap (doto (ServerBootstrap.)
                          (set-so-backlog! options)
                          (bs/set-group! boss-group)
-                         (http/set-optimal-server-channel!)
+                         (http/set-optimal-server-channel! (:disable-epoll options))
                          (bs/set-child-handler! (initializer options)))
              channel   (-> bootstrap
                            (http/set-log-handler! options)

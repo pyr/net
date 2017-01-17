@@ -228,8 +228,8 @@
 (s/def ::bootstrap (partial instance? Bootstrap))
 
 (s/def ::server-bootstrap-schema
-  (s/keys :req-un [::group ::handler]
-          :opt-un [::options ::child-options ::child-attrs
+  (s/keys :req-un [::handler]
+          :opt-un [::options ::child-options ::child-attrs ::group
                    ::child-group ::channel]))
 
 (s/def ::bootstrap-schema

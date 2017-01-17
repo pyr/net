@@ -162,3 +162,12 @@ encouraged to also consider [aleph](http://aleph.io). Net aims to
 provide thin wrapping for people familiar with netty and happy to work
 mostly with [core.async](https://github.com/clojure/core.async) as
 their asynchronous channel interface.
+
+Now that you hopefully have a better idea of each foundation net
+builds on top of, you can look at how to build servers and clients
+with it. Here are a few additional walk-through guides:
+
+- [An echo server](echo.md)
+- [A chat server](chat.md)
+- [TLS support](tls.md)
+- [HTTP servers](http-server.md)
