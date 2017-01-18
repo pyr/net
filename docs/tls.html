@@ -21,7 +21,7 @@
 </code></pre>
 <p>In the above, we create an <strong>SSL Context</strong> for a given private key and certificate. Certificates may be given inline or point to files. By default, this is inferred from the size of inputs, but can be controlled with the <code>:storage</code> key of the argument map.</p>
 <p>As is standard on the JVM, private keys need to be provide in the <strong>PKCS8</strong> format, not in <strong>PEM</strong> format as is more commonly the case.</p>
-<p>Additional behavior may be forced on the <strong>SSL Context</strong> such as forced client certificate authentication. For a full description see the documentation for <a href="/net.ssl.html#var-server-context"><code>ssl/server-context</code></a>.</p>
+<p>Additional behavior may be forced on the <strong>SSL Context</strong> such as forced client certificate authentication. For a full description see the documentation for <a href="net.ssl.html#var-server-context"><code>ssl/server-context</code></a>.</p>
 <p>The rest of the pipeline code is almost unchanged:</p>
 <pre><code class="clojure">(defn pipeline
   [ssl-ctx]
