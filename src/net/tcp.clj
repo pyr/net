@@ -20,4 +20,4 @@
   (let [bs  (bootstrap/server-bootstrap bootstrap-config)
         srv (bootstrap/bind! bs host port)]
     (fn []
-      (-> server channel/channel channel/close! channel/sync-uninterruptibly!))))
+      (-> srv channel/channel channel/close! channel/sync-uninterruptibly!))))
