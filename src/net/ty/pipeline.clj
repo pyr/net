@@ -315,10 +315,10 @@
       (when (satisfies? ExceptionCaught adapter)
         (exception-caught adapter ctx e)))
     (channelWritabilityChanged [^ChannelHandlerContext ctx]
-      (when (satisfies? ChannelWritabilityChanged)
+      (when (satisfies? ChannelWritabilityChanged adapter)
         (channel-writability-changed adapter ctx)))
     (userEventTriggered [^ChannelHandlerContext ctx event]
-      (when (satisfies? UserEventTriggered)
+      (when (satisfies? UserEventTriggered adapter)
         (user-event-triggered adapter ctx event)))))
 
 (defn flush!
