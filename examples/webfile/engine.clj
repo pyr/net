@@ -5,6 +5,11 @@
             [clojure.tools.logging      :refer [info]])
   (:import java.nio.file.StandardOpenOption
            java.nio.file.OpenOption
+           java.nio.file.FileSystem
+           java.nio.ByteBuffer
+           java.nio.channels.Channel
+           io.netty.buffer.ByteBufHolder
+           io.netty.buffer.ByteBuf
            java.nio.channels.FileChannel))
 
 (def fs (delay (java.nio.file.FileSystems/getDefault)))
@@ -31,15 +36,15 @@
 
 (defn path-for
   [root & elems]
-  (.getPath @fs root (into-array String [(join "-" elems)])))
+  (.getPath ^FileSystem @fs root (into-array String [(join "-" elems)])))
 
 (defn write-nio-buffer
-  [chan buf]
+  [^FileChannel chan ^ByteBuffer buf]
   (.write chan buf))
 
 (defn buffers-from
   [http-content]
-  (let [bb (.content http-content)]
+  (let [bb ^ByteBuf (.content ^ByteBufHolder http-content)]
     (seq (.nioBuffers bb))))
 
 (defn write-bufs

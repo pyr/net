@@ -337,7 +337,7 @@
   [^ChannelHandlerContext ctx msg]
   (.writeAndFlush ctx msg))
 
-(defmacro with-input
+(defmacro ^ChannelInboundHandlerAdapter with-input
   "Inline definition of a **ChannelInboundHandlerAdapter** which
    captures context and input and executes body."
   [[ctx input] & body]
