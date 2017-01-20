@@ -58,7 +58,7 @@
 (def nio-socket-channel        NioSocketChannel)
 (def nio-datagram-channel      NioDatagramChannel)
 
-(defn ^NioEventLoopGroup nio-event-loop-group
+(defn ^EventLoopGroup nio-event-loop-group
   "Yield a new NioEventLoopGroup"
   []
   (NioEventLoopGroup.))
@@ -68,10 +68,11 @@
   [config]
   (when-not (s/valid? ::server-bootstrap-schema config)
     (throw (IllegalArgumentException. "invalid server bootstrap configuration")))
-  (let [bs (ServerBootstrap.)]
-    (if-let [c (:child-group config)]
-      (.group bs (or (:group config) (nio-event-loop-group)) c)
-      (.group bs (or (:group config) (nio-event-loop-group))))
+  (let [bs (ServerBootstrap.)
+        group ^EventLoopGroup (:child-group config)]
+    (if-let [c ^EventLoopGroup (:child-group config)]
+      (.group bs (or group (nio-event-loop-group)) c)
+      (.group bs (or group (nio-event-loop-group))))
     (.channel bs (or (:channel config) nio-server-socket-channel))
     (doseq [[k v] (:options config) :let [copt (->channel-option k)]]
       (.option bs copt (if (number? v) (int v) v)))
@@ -99,11 +100,6 @@
       (.remoteAddress bs host (int port)))
     (.handler bs (:handler config))
     (.validate bs)))
-
-(defn sync!
-  "Synchronize bootstrap"
-  [^AbstractBootstrap bs]
-  (.sync bs)) ;; ?? bug?
 
 (defn bind!
   "Bind bootstrap to a host and port"
