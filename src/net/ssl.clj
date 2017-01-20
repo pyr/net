@@ -75,7 +75,7 @@
         kspec (PKCS8EncodedKeySpec. bytes)]
     (.generatePrivate factory kspec)))
 
-(defn ->chain
+(defn ^"[Ljava.security.cert.X509Certificate;" ->chain
   "Get a certificate chain out of several certificate specs"
   [^CertificateFactory fact cert-spec]
   (if (sequential? cert-spec)
@@ -94,7 +94,7 @@
           (let [cert      (s->cert cert-fact cert)
                 authority (s->cert cert-fact authority)
                 pkey      (s->pkey key-fact pkey)
-                chain     (into-array X509Certificate [cert authority])]
+                chain     ^"[Ljava.security.cert.X509Certificate;" (into-array X509Certificate [cert authority])]
             (.keyManager builder ^PrivateKey pkey chain)
             (.trustManager builder chain))))
       (when (and bundle password)
@@ -104,8 +104,8 @@
           (let [alias (first (enumeration-seq (.aliases keystore)))
                 k     (.getKey keystore alias (char-array password))
                 chain (.getCertificateChain keystore alias)]
-            (.keyManager builder ^PrivateKey k (into-array X509Certificate (seq chain)))
-            (.trustManager builder (into-array X509Certificate (seq chain))))))
+            (.keyManager builder ^PrivateKey k ^"[Ljava.security.cert.X509Certificate;" (into-array X509Certificate (seq chain)))
+            (.trustManager builder ^"[Ljava.security.cert.X509Certificate;" (into-array X509Certificate (seq chain))))))
       (.build builder))))
 
 (defn server-context
@@ -114,29 +114,29 @@
            cache-size session-timeout storage]}]
   (binding [*storage* (or storage :guess)]
     (let [fact     (CertificateFactory/getInstance "X.509")
-          certs    (->chain fact cert)
-          password (char-array password)
+          certs    ^"[Ljava.security.cert.X509Certificate;" (->chain fact cert)
           key-fact (KeyFactory/getInstance "RSA")
           pk       (s->pkey key-fact pkey)
           builder  (if (string? password)
-                     (SslContextBuilder/forServer pk (char-array password) certs)
-                     (SslContextBuilder/forServer pk certs))]
+                     ^SslContextBuilder (SslContextBuilder/forServer pk ^String password certs)
+                     ^SslContextBuilder (SslContextBuilder/forServer pk certs))]
       (when ciphers
-        (.ciphers ciphers))
+        (.ciphers builder ciphers))
       (when ca-cert
         (.trustManager builder
+                       ^"[Ljava.security.cert.X509Certificate;"
                        (into-array X509Certificate (->chain fact ca-cert))))
       (when cache-size
-        (.cacheSize (long cache-size)))
+        (.sessionCacheSize builder (long cache-size)))
       (when session-timeout
-        (.sessionTimeout (long session-timeout)))
+        (.sessionTimeout builder (long session-timeout)))
       (when auth-mode
         (.clientAuth builder (case auth-mode
                                :auth-mode-optional ClientAuth/OPTIONAL
                                :auth-mode-require  ClientAuth/REQUIRE
                                :auth-mode-none     ClientAuth/NONE
                                (throw (ex-info "invalid client auth mode" {})))))
-      (.build builder))))
+      (.build ^SslContextBuilder builder))))
 
 (defn ^clojure.lang.IFn handler-fn
   "Build a handler function to be used in netty pipelines out of an SSL context.
