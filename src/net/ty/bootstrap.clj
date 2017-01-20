@@ -68,7 +68,9 @@
   (when-not (s/valid? ::server-bootstrap-schema config)
     (throw (IllegalArgumentException. "invalid server bootstrap configuration")))
   (let [bs (ServerBootstrap.)]
-    (.group   bs (or (:group config) (nio-event-loop-group)))
+    (if-let [c (:child-group config)]
+      (.group bs (or (:group config) (nio-event-loop-group)) c)
+      (.group bs (or (:group config) (nio-event-loop-group))))
     (.channel bs (or (:channel config) nio-server-socket-channel))
     (doseq [[k v] (:options config) :let [copt (->channel-option k)]]
       (.option bs copt (if (number? v) (int v) v)))
@@ -76,8 +78,6 @@
       (.childOption bs copt (if (number? v) (int v) v)))
     (doseq [[k v] (:child-attrs config)]
       (.childAttr bs (AttributeKey/valueOf (name k)) v))
-    (when-let [group (:child-group config)]
-      (.childGroup bs group))
     (.childHandler bs (:handler config))
     (.validate bs)))
 
