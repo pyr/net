@@ -11,6 +11,7 @@
            java.io.ByteArrayInputStream
            javax.xml.bind.DatatypeConverter
            io.netty.channel.ChannelHandler
+           io.netty.channel.Channel
            io.netty.handler.ssl.SslContext
            io.netty.handler.ssl.SslContextBuilder
            io.netty.handler.ssl.ClientAuth))
