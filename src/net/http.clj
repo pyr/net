@@ -51,9 +51,8 @@
   []
   (Epoll/isAvailable))
 
-(defn bb->string
-  "Convert a ByteBuf to a UTF-8 String."
-  [bb]
+(defn ^String bb->string  "Convert a ByteBuf to a UTF-8 String."
+  [^ByteBuf bb]
   (.toString bb (Charset/forName "UTF-8")))
 
 (def method->data
@@ -95,12 +94,12 @@
   "Add log hander to a bootstrap"
   [^AbstractBootstrap bootstrap {:keys [logging]}]
   (let [handler (when-let [level (some-> logging keyword (get log-levels))]
-                  (LoggingHandler. level))]
+                  (LoggingHandler. ^LogLevel level))]
     (cond-> bootstrap  handler (.handler handler))))
 
 (defn set-optimal-server-channel!
   "Add optimal channel to a server bootstrap"
-  [bs disable-epoll?]
+  [^AbstractBootstrap bs disable-epoll?]
   (.channel bs (if (and (not disable-epoll?) (epoll?))
                  EpollServerSocketChannel NioServerSocketChannel))
   bs)

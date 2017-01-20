@@ -6,6 +6,7 @@
             [clojure.spec       :as s]
             [clojure.core.async :as async])
   (:import io.netty.bootstrap.Bootstrap
+           io.netty.buffer.ByteBuf
            io.netty.channel.Channel
            io.netty.channel.ChannelHandlerContext
            io.netty.channel.ChannelHandlerAdapter
@@ -26,6 +27,7 @@
            io.netty.handler.logging.LogLevel
            io.netty.handler.codec.http.HttpClientCodec
            io.netty.handler.codec.http.HttpRequest
+           io.netty.handler.codec.http.DefaultFullHttpRequest
            io.netty.handler.codec.http.HttpMethod
            io.netty.handler.codec.http.HttpHeaders
            io.netty.handler.codec.http.HttpResponseStatus
@@ -160,7 +162,7 @@
 (defn auth->headers
   "If basic auth is present as a map within a request, add the
    corresponding header."
-  [headers {:keys [user password]}]
+  [^HttpHeaders headers {:keys [user password]}]
   (when (and user password)
     (.set headers "Authorization"
           (format "Basic %s" (b64/s->b64 (str user ":" password)))))
@@ -168,15 +170,18 @@
 
 (defn data->body
   "Add body to a request"
-  [request method body]
+  [^DefaultFullHttpRequest request
+   method
+   ^String body]
   (when body
-    (let [headers (.headers request)
-          bytes   (cond
-                    (string? body) (.getBytes body)
-                    :else          (throw (ex-info "wrong body type" {})))]
-      (-> request .content .clear (.writeBytes bytes))
+    (let [^HttpHeaders headers (.headers request)
+          ^"[B" bytes   (cond
+                          (string? body) (.getBytes ^String body)
+                          :else          (throw (ex-info "wrong body type" {})))]
+      (let [^ByteBuf content (.content request)]
+        (-> content .clear (.writeBytes bytes)))
       (when-not (.get headers "Content-Length")
-        (.set headers "Content-Length" (count body))))))
+        (.set headers "Content-Length" (str (count body)))))))
 
 (defn ^URI data->uri
   "Produce a valid URI from arguments found in a request map"

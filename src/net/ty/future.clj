@@ -1,24 +1,26 @@
 (ns net.ty.future
-  "Handy functions to deal with netty futures")
+  "Handy functions to deal with netty futures"
+  (:import (io.netty.channel ChannelFutureListener)
+           (io.netty.channel ChannelFuture)))
 
 (defn success?
   "Predicate to test for future success"
-  [^io.netty.channel.ChannelFuture f]
+  [^ChannelFuture f]
   (.isSuccess f))
 
 (defn cancelled?
   "Predicate to test for future cancellation"
-  [^io.netty.channel.ChannelFuture f]
+  [^ChannelFuture f]
   (.isCancelled f))
 
 (defn incomplete?
   "Predicate to test for future cancellation or failure"
-  [^io.netty.channel.ChannelFuture f]
+  [^ChannelFuture f]
   (or (cancelled? f) (not (success? f))))
 
 (defn complete?
   "Predicate to test for future completeness"
-  [^io.netty.channel.ChannelFuture f]
+  [^ChannelFuture f]
   (and (success? f) (not (cancelled? f))))
 
 (defmacro with-result
@@ -26,15 +28,15 @@
   [[future action] & body]
   `(.addListener
     ~action
-    (reify io.netty.channel.ChannelFutureListener
+    (reify ChannelFutureListener
       (operationComplete [this# ~future]
         (do ~@body)))))
 
 (defn operation-complete
   "Signal that operation completed on a listener"
-  ([listener]
+  ([^ChannelFutureListener listener]
    (.operationComplete listener nil))
-  ([listener future]
+  ([^ChannelFutureListener listener future]
    (.operationComplete listener future)))
 
 (defmacro deflistener
@@ -49,12 +51,12 @@
 
 (defn sync!
   "Synchronize future"
-  [future]
+  [^ChannelFuture future]
   (.sync future))
 
 (defn add-listener
   "Add a listener to a channel"
-  [chan listener]
+  [^ChannelFuture chan ^ChannelFutureListener listener]
   (.addListener chan listener))
 
 (def close-listener
@@ -63,5 +65,5 @@
 
 (defn add-close-listener
   "Add close-listener to a channel"
-  [chan]
+  [^ChannelFuture chan]
   (.addListener chan io.netty.channel.ChannelFutureListener/CLOSE))

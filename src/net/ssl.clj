@@ -56,12 +56,13 @@
   [input]
   (if (instance? (Class/forName "[B") input)
     input
-    (.getBytes (cert-string input))))
+    (.getBytes ^String (cert-string input))))
 
 (defn ^X509Certificate s->cert
   "Generate an X509 from a given source."
   [factory input]
-  (.generateCertificate factory (ByteArrayInputStream. (cert-bytes input))))
+  (.generateCertificate ^CertificateFactory factory
+                        (ByteArrayInputStream. (cert-bytes input))))
 
 (defn ^PrivateKey s->pkey
   "When reading private keys, we unfortunately have to
@@ -142,7 +143,7 @@
    context, a host, and a port which will add a handler to the context."
   ([^SslContext ctx host port]
    (fn ^ChannelHandler make-handler []
-     (.newHandler ctx (.alloc *channel*) host port)))
+     (.newHandler ctx (.alloc ^Channel *channel*) host port)))
   ([^SslContext ctx]
    (fn ^ChannelHandler make-handler []
-     (.newHandler ctx (.alloc *channel*)))))
+     (.newHandler ctx (.alloc ^Channel *channel*)))))
