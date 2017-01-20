@@ -3,6 +3,7 @@
   (:import java.util.concurrent.TimeUnit
            java.nio.ByteOrder
            io.netty.util.CharsetUtil
+           io.netty.channel.Channel
            io.netty.channel.ChannelHandler
            io.netty.channel.ChannelInboundHandlerAdapter
            io.netty.channel.ChannelHandlerContext
@@ -82,7 +83,7 @@
   (user-event-triggered [this ctx event]
     "Called when a user event has been triggered on a channel"))
 
-(def ^:dynamic *channel*
+(def ^:dynamic ^Channel *channel*
   "Thread-local binding for a channel"
   nil)
 
@@ -189,7 +190,7 @@
    (proxy [MessageToMessageEncoder] []
      (isSharable []
        true)
-     (encode [ctx msg out]
+     (encode [ctx msg ^java.util.List out]
        (.add out (str msg "\r\n"))))))
 
 (defmacro defencoder

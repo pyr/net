@@ -50,10 +50,13 @@
            io.netty.handler.codec.http.LastHttpContent
            io.netty.handler.codec.http.HttpVersion
            io.netty.handler.codec.http.HttpObjectAggregator
+           io.netty.handler.codec.http.HttpObject
            io.netty.handler.codec.http.QueryStringDecoder
+           io.netty.bootstrap.AbstractBootstrap
            io.netty.bootstrap.ServerBootstrap
            io.netty.buffer.Unpooled
            io.netty.buffer.ByteBuf
+           io.netty.channel.ChannelPipeline
            io.netty.buffer.ByteBufAllocator
            io.netty.buffer.UnpooledByteBufAllocator
            java.io.InputStream
@@ -100,7 +103,7 @@
 (defn qs->body-params
   "Extract body parameters from a body when application"
   [{:keys [headers body]}]
-  (when-let [content-type (:content-type headers)]
+  (when-let [^String content-type (:content-type headers)]
     (when (.startsWith content-type "application/x-www-form-urlencoded")
       (->params
        (QueryStringDecoder. (http/bb->string body) false)))))
@@ -138,7 +141,7 @@
 (extend-protocol ChunkEncoder
   (Class/forName "[B")
   (chunk->http-object [chunk]
-    (DefaultHttpContent. (Unpooled/wrappedBuffer chunk)))
+    (DefaultHttpContent. (Unpooled/wrappedBuffer ^"[B" chunk)))
 
   ByteBuffer
   (chunk->http-object [chunk]
@@ -248,10 +251,10 @@
 (defn backpressure-fn
   "Stop automatically reading from the body channel when we are signalled
    for backpressure."
-  [ctx]
+  [^ChannelHandlerContext ctx]
   (fn [enable?]
     (warn "switching backpressure mode to:" enable?)
-    (-> ctx chan/channel .config (.isAutoRead (not enable?)))))
+    (-> ctx chan/channel .config (.setAutoRead (not enable?)))))
 
 (defn close-fn
   "A closure over a context that will close it when called."
@@ -266,7 +269,7 @@
 
 (defmethod write-chunk ::aggregated
   [{:keys [request] :as state} handler ctx msg close?]
-  (buf/augment-buffer (:body request) (.content msg))
+  (buf/augment-buffer (:body request) (.content ^FullHttpRequest msg))
   (when close?
     (-> state
         (update :request assoc-body-params)
@@ -279,7 +282,7 @@
     (a/close! (:body request))))
 
 
-(defn netty-handler
+(defn ^ChannelHandler netty-handler
   "This is a stateful, per HTTP session adapter which wraps the user
    supplied function.
    We can use volatiles for keeping track of state due to the thread-safe
@@ -306,7 +309,7 @@
                (.write ctx (DefaultFullHttpResponse. HttpVersion/HTTP_1_1
                                                      HttpResponseStatus/CONTINUE)))
              (vswap! state assoc
-                     :version (.getProtocolVersion msg)
+                     :version (.getProtocolVersion ^HttpRequest msg)
                      :request (->request msg))
              (let [length (request-length (:request @state))]
                (if (or (nil? length) (> length agg-length))
@@ -330,7 +333,7 @@
              (error "unhandled message chunk on body channel")
              (throw (IllegalArgumentException. "unhandled message chunk on body channel")))))))))
 
-(defn body-decoder
+(defn ^io.netty.handler.codec.MessageToMessageDecoder body-decoder
   "To simplify the life of downstream consumers, we
    create fixed-size chunks. For example, for an input
    payload of 42M and a chunk size of 16M, the handler
@@ -341,11 +344,11 @@
     (proxy [io.netty.handler.codec.MessageToMessageDecoder] []
       (isSharable []
         false)
-      (decode [ctx msg out]
+      (decode [^ChannelHandlerContext ctx msg ^java.util.List out]
         (try
           (cond
             (instance? HttpRequest msg)
-            (.add out msg)
+            (.add out ^HttpRequest msg)
 
             (buf/last-http-content? msg)
             (doseq [chunk (buf/release-contents max-size content msg)]
@@ -369,14 +372,14 @@
             codec        (HttpServerCodec. 4096 8192 (int chunk-size))
             aggregator   (body-decoder chunk-size)
             handler      (netty-handler ring-handler handler-opts)
-            pipeline     (.pipeline channel)]
-        (.addLast pipeline "codec"      codec)
+            pipeline     (.pipeline ^io.netty.channel.Channel channel)]
+        (.addLast pipeline "codec"       codec)
         (.addLast pipeline "aggregator" aggregator)
         (.addLast pipeline "handler"    handler)))))
 
 (defn set-so-backlog!
   "Adjust Bootstrap socket backlog"
-  [bootstrap {:keys [so-backlog]}]
+  [^AbstractBootstrap bootstrap {:keys [so-backlog]}]
   (.option bootstrap ChannelOption/SO_BACKLOG (int (or so-backlog 1024))))
 
 (defn get-host-port

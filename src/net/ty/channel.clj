@@ -4,61 +4,65 @@
   (:import io.netty.channel.ChannelFuture
            io.netty.channel.ChannelFutureListener
            io.netty.channel.Channel
+           io.netty.channel.ChannelHandlerContext
            io.netty.channel.group.ChannelGroup
            io.netty.channel.group.DefaultChannelGroup
            io.netty.util.concurrent.GlobalEventExecutor))
 
 (defn ^Channel channel
   "Extract the channel from a channel holder"
-  [channel-holder]
+  [^ChannelHandlerContext channel-holder]
   (.channel channel-holder))
 
 (defn await
   "Wait on a channel"
-  [^Channel channel]
+  [^ChannelFuture channel]
   (.await channel))
 
 (defn write!
   "write a payload to a channel"
-  [channel msg]
+  [^Channel channel msg]
   (.write channel msg))
 
 (defn flush!
   "flush a channel"
-  [channel]
+  [^Channel channel]
   (.flush channel))
 
 (defn write-and-flush!
   "write a payload, then flush a channel"
-  [channel msg]
+  [^Channel channel msg]
   (.writeAndFlush channel msg))
 
 (defn channel-group
   "Create a named channel group"
   [name]
-  (DefaultChannelGroup. name GlobalEventExecutor/INSTANCE))
+  (DefaultChannelGroup. ^String name
+                        GlobalEventExecutor/INSTANCE))
 
 (defn add-to-group
   "Add a channel to a channel group"
-  [group chan]
+  [^ChannelGroup group
+   ^Channel chan]
   (.add group chan))
 
 (defn remove-from-group
   "Remove a channel from a channel group"
-  [group chan]
+  [^ChannelGroup group
+   ^Channel chan]
   (.remove group chan))
 
 (defn close!
   "Close a channel"
-  [chan]
+  [^Channel chan]
   (.close chan))
 
 (defn sync-uninterruptibly!
   "Sync a channel, without interruptions"
-  [chan]
+  [^ChannelFuture chan]
   (.syncUninterruptibly chan))
 
-(defn close-future
+(defn ^ChannelFuture close-future
   "Get the close future for a channel"
-  [chan]
+  [^Channel chan]
   (.closeFuture chan))
