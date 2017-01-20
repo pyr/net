@@ -20,4 +20,5 @@
   (let [bs  (bootstrap/server-bootstrap bootstrap-config)
         srv (bootstrap/bind! bs host port)]
     (fn []
+      (-> bs .childGroup .shutdownGracefully)
       (-> srv channel/channel channel/close! channel/sync-uninterruptibly!))))
