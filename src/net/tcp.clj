@@ -19,5 +19,4 @@
   [bootstrap-config host port]
   (let [bs  (bootstrap/server-bootstrap bootstrap-config)
         srv (bootstrap/bind! bs host port)]
-    (fn []
-      (-> srv channel/channel channel/close! channel/sync-uninterruptibly!))))
+    (bootstrap/shutdown-fn (channel/channel srv) (.childGroup bs))))
