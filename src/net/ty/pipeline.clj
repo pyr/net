@@ -202,7 +202,7 @@
        (isSharable []
          (or (nil? ~shareable?)
              (boolean ~shareable?)))
-       (encode [~ctx ~msg out#]
+       (encode [^ChannelHandlerContext ~ctx ~msg ^java.util.List out#]
          (.add out# (do ~@body))))))
 
 (defmacro defdecoder
@@ -214,7 +214,7 @@
        (isSharable []
          (or (nil? ~shareable?)
              (boolean ~shareable?)))
-       (decode [~ctx ~msg out#]
+       (decode [^ChannelHandlerContext ~ctx ~msg ^java.util.List out#]
          (.add out# (do ~@body))))))
 
 (defmulti ->byte-order "Concerts to a ByteOrder" class)
@@ -345,8 +345,10 @@
      (channelRead [^ChannelHandlerContext ~ctx ~input]
        (do ~@body))
      (channelReadComplete [^ChannelHandlerContext ~ctx]
-       (.flush ~ctx))
-     (exceptionCaught [^ChannelHandlerContext ~ctx ^Throwable e#]
-       (proxy-super exceptionCaught ~ctx e#))
+       (.flush ^ChannelHandlerContext ~ctx))
+     (exceptionCaught [^ChannelHandlerContext ~ctx ^Exception e#]
+       (proxy-super exceptionCaught
+                    ^ChannelHandlerContext ~ctx
+                    ^Exception e#))
      (isSharable []
        true)))

@@ -10,7 +10,7 @@
     pipeline/string-decoder
     pipeline/string-encoder
     pipeline/line-frame-encoder
-    (pipeline/with-input [ctx msg]
+    (pipeline/with-input [^io.netty.channel.ChannelHandlerContext ctx msg]
       (channel/write-and-flush! ctx msg))]))
 
 (defn -main

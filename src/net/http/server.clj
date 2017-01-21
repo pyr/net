@@ -199,8 +199,8 @@
 ;; When called with an actual future, apply the same logic, re-using the listener
 ;; up to the point where no more chunks have to be sent out or an error occurs.
 (f/deflistener write-response-listener
-  [this future [^ChannelHandlerContext ctx ^Channel body]]
-  (if (or (nil? future) (f/complete? future))
+  [this ftr [^ChannelHandlerContext ctx ^Channel body]]
+  (if (or (nil? ftr) (f/complete? ftr))
     (let [chunk (a/<!! body)
           msg   (if chunk (chunk->http-object chunk) last-http-content)]
       (-> (chan/write-and-flush! ctx msg)

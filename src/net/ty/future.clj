@@ -23,14 +23,20 @@
   [^ChannelFuture f]
   (and (success? f) (not (cancelled? f))))
 
+(defn add-listener
+  "Add a listener to a channel"
+  [^ChannelFuture chan ^ChannelFutureListener listener]
+  (.addListener chan listener))
+
 (defmacro with-result
   "Marco to create future listeners"
-  [[future action] & body]
-  `(.addListener
-    ~action
-    (reify ChannelFutureListener
-      (operationComplete [this# ~future]
-        (do ~@body)))))
+  [[ftr action] & body]
+  `(let [f# ^ChannelFuture ~action]
+     (add-listener
+      f#
+      (reify ChannelFutureListener
+        (operationComplete [this# ^ChannelFuture ~ftr]
+          (do ~@body))))))
 
 (defn operation-complete
   "Signal that operation completed on a listener"
@@ -41,12 +47,12 @@
 
 (defmacro deflistener
   "Define a channel future listener"
-  [sym [listener future bindings] & body]
+  [sym [listener ftr bindings] & body]
   `(defn ~sym
      ~bindings
      (reify
        io.netty.channel.ChannelFutureListener
-       (operationComplete [~listener ~future]
+       (operationComplete [~listener ^ChannelFuture ~ftr]
          (do ~@body)))))
 
 (defn sync!
@@ -54,15 +60,11 @@
   [^ChannelFuture future]
   (.sync future))
 
-(defn add-listener
-  "Add a listener to a channel"
-  [^ChannelFuture chan ^ChannelFutureListener listener]
-  (.addListener chan listener))
+
 
 (def close-listener
   "Listener which closes a channel"
   io.netty.channel.ChannelFutureListener/CLOSE)
-
 (defn add-close-listener
   "Add close-listener to a channel"
   [^ChannelFuture chan]
