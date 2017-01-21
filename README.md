@@ -29,10 +29,15 @@ Net now has full [API Documentation](http://pyr.github.io/net) and
 ## Installation
 
 ```clojure
-    [[spootnik/net "0.3.3-beta3"]]
+    [[spootnik/net "0.3.3-beta4"]]
 ```
 
 ## Changelog
+
+### 0.3.3-beta4
+
+- Ensure all calls do not need reflection.
+- Correctly terminate clients in tcp server shutdown fn.
 
 ### 0.3.3-beta3
 
@@ -68,6 +73,11 @@ Net now has full [API Documentation](http://pyr.github.io/net) and
 - `core.spec` schemas instead of prismatic schema
 - Rely on Netty 4.1.6
 - Additional sugar for futures and channels
+
+## Thanks
+
+- CRHough (https://github.com/CRHough) for a number of small fixes.
+- Max Penet (https://github.com/mpenet) for most of the reflection fixes.
 
 ## License
 
