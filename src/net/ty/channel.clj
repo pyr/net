@@ -9,15 +9,20 @@
            io.netty.channel.group.DefaultChannelGroup
            io.netty.util.concurrent.GlobalEventExecutor))
 
-(defn ^Channel channel
-  "Extract the channel from a channel holder"
-  [^ChannelHandlerContext channel-holder]
-  (.channel channel-holder))
-
 (defn await
   "Wait on a channel"
   [^ChannelFuture channel]
   (.await channel))
+
+(defmulti ^Channel channel type)
+
+(defmethod channel ChannelHandlerContext
+  [channel-holder]
+  (.channel channel-holder))
+
+(defmethod channel AbstractBootstrap$PendingRegistrationPromise
+  [channel-holder]
+  (.channel (await channel-holder)))
 
 (defn write!
   "write a payload to a channel"
