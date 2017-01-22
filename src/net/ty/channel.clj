@@ -9,9 +9,14 @@
            io.netty.channel.group.DefaultChannelGroup
            io.netty.util.concurrent.GlobalEventExecutor))
 
-(defn ^Channel channel
-  "Extract the channel from a channel holder"
-  [^ChannelHandlerContext channel-holder]
+(defmulti ^Channel channel type)
+
+(defmethod channel ChannelHandlerContext
+  [channel-holder]
+  (.channel channel-holder))
+
+(defmethod channel AbstractBootstrap$PendingRegistrationPromise
+  [channel-holder]
   (.channel channel-holder))
 
 (defn await
