@@ -161,7 +161,7 @@
 
   String
   (chunk->http-object [chunk]
-    (Unpooled/wrappedBuffer (.getBytes chunk "UTF8")))
+    (DefaultHttpContent. (Unpooled/wrappedBuffer (.getBytes chunk "UTF8"))))
 
   HttpContent
   (chunk->http-object [chunk] chunk))
@@ -251,7 +251,7 @@
 (defn backpressure-fn
   "Stop automatically reading from the body channel when we are signalled
    for backpressure."
-  [^ChannelHandlerContext ctx]
+  [ctx]
   (fn [enable?]
     (warn "switching backpressure mode to:" enable?)
     (-> ctx chan/channel .config (.setAutoRead (not enable?)))))
