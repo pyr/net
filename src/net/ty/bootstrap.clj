@@ -83,6 +83,24 @@
     (.childHandler bs (:handler config))
     (.validate bs)))
 
+(defn remote-address!
+  "Set remote address for a client bootstrap, allows host and port
+   to be provided as a SocketAddress"
+  ([^Bootstrap bs ^SocketAddress sa]
+   (.remoteAddress bs sa))
+  ([^Bootstrap bs
+    host
+    ^Long port]
+   (cond
+     (string? host)
+     (.remoteAddress bs ^String host (int port))
+
+     (instance? InetAddress host)
+     (.remoteAddress bs ^InetAddress host (int port))
+
+     :else
+     (throw (IllegalArgumentException. "invalid address")))))
+
 (defn ^AbstractBootstrap bootstrap
   "Build a client bootstrap from a configuration map"
   [config]
@@ -96,8 +114,8 @@
       (.option bs copt (if (number? v) (int v) v)))
     (doseq [[k v] (:attrs config)]
       (.attr bs (AttributeKey/valueOf (name k)) v))
-    (when-let [[^InetAddress host port] (:remote-address config)]
-      (.remoteAddress bs host (int port)))
+    (when-let [[host port] (:remote-address config)]
+      (remote-address! bs host port))
     (.handler bs (:handler config))
     (.validate bs)))
 
@@ -105,16 +123,6 @@
   "Bind bootstrap to a host and port"
   [^ServerBootstrap bs ^String host ^Long port]
   (.bind bs host (int port)))
-
-(defn remote-address!
-  "Set remote address for a client bootstrap, allows host and port
-   to be provided as a SocketAddress"
-  ([^Bootstrap bs ^SocketAddress sa]
-   (.remoteAddress bs sa))
-  ([^Bootstrap bs
-    ^InetAddress host
-    ^Long port]
-   (.remoteAddress bs host (int port))))
 
 (defn connect!
   "Attempt connection of a bootstrap. Accepts as pre-configured bootstrap,
