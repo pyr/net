@@ -15,10 +15,8 @@
   [^ChannelFuture channel]
   (.await channel))
 
-(defn ^Channel channel
-  "Extract the channel from a channel holder"
-  [^AbstractBootstrap$PendingRegistrationPromise channel-holder]
-  (.channel channel-holder))
+(defprotocol ChannelHolder
+  (get-channel [this] "Extract channel from holder"))
 
 (defprotocol ChannelResource
   (write! [this msg] "write a payload to resource")
@@ -28,7 +26,19 @@
   (disconnect! [this])
   (deregister! [this]))
 
+(defn ^Channel channel
+  [x]
+  (get-channel x))
+
+(extend-type AbstractBootstrap$PendingRegistrationPromise
+  ChannelHolder
+  (get-channel [this]
+    (.channel this)))
+
 (extend-type ChannelHandlerContext
+  ChannelHolder
+  (get-channel [this]
+    (.channel this))
   ChannelResource
   (write! [ch msg]
     (.write ch msg))
@@ -49,6 +59,9 @@
     (.deregister ch)))
 
 (extend-type Channel
+  ChannelHolder
+  (get-channel [this]
+    this)
   ChannelResource
   (write! [ch msg]
     (.write ch msg))
