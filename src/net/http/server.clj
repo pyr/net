@@ -16,6 +16,7 @@
             [net.ty.bootstrap      :as bs]
             [net.ty.channel        :as chan]
             [net.http              :as http]
+            [net.core.concurrent   :as nc]
             [clojure.core.async    :as a]
             [clojure.spec          :as s]
             [net.core.async        :refer [put!]]
@@ -71,6 +72,8 @@
 (def default-inbuf "" 10)
 
 (def default-aggregated-length "" (* 1024 1024))
+
+(def default-response-write-executor "" (delay (nc/executor :cached)))
 
 (def ^:dynamic *request-ctx* nil)
 
@@ -233,15 +236,14 @@
 (defn get-response
   "When an aggregated request is done buffereing,
    Execute the handler on it and publish the response."
-  [{:keys [request version]} handler ctx]
+  [{:keys [request version]} handler ctx executor]
   (let [resp (handler request)]
     (cond
       (instance? Channel resp)
       (a/take! resp (partial write-response ctx version))
 
       (map? resp)
-      (future
-        (write-response ctx version resp))
+      (nc/submit! @executor (write-response ctx version resp))
 
       :else
       (do
@@ -289,10 +291,12 @@
    nature of handler adapters."
   ([handler]
    (netty-handler handler {}))
-  ([handler {:keys [inbuf aggregate-length]}]
-   (let [inbuf      (or inbuf default-inbuf)
-         agg-length (or aggregate-length default-aggregated-length)
-         state      (volatile! {:aggregate? false})]
+  ([handler {:keys [inbuf aggregate-length response-write-executor]}]
+   (let [inbuf                   (or inbuf default-inbuf)
+         agg-length              (or aggregate-length default-aggregated-length)
+         response-write-executor (or response-write-executor
+                                     default-response-write-executor)
+         state                   (volatile! {:aggregate? false})]
      (proxy [ChannelInboundHandlerAdapter] []
        (exceptionCaught [^ChannelHandlerContext ctx e]
          (error e "exception caught!")
@@ -315,7 +319,7 @@
                (if (or (nil? length) (> length agg-length))
                  (do
                    (vswap! state assoc-in [:request :body] (a/chan inbuf))
-                   (get-response @state handler ctx))
+                   (get-response @state handler ctx response-write-executor))
                  (do
                    (vswap! state
                            #(-> (assoc % :aggregate? true)
@@ -368,7 +372,8 @@
     :as   opts}]
   (proxy [ChannelInitializer] []
     (initChannel [channel]
-      (let [handler-opts (select-keys opts [:inbuf :aggregate-length])
+      (let [handler-opts (select-keys opts [:inbuf :aggregate-length
+                                            :response-write-executor])
             codec        (HttpServerCodec. 4096 8192 (int chunk-size))
             aggregator   (body-decoder chunk-size)
             handler      (netty-handler ring-handler handler-opts)
@@ -428,14 +433,15 @@
    The options map is of the following form:
 
    ```
-   {:loop-thread-count <threadcount>
-    :disable-epoll     <boolean>
-    :host              <host>
-    :port              <port>
-    :chunk-size        <chunk-size>
-    :inbuf             <input-channel-buffer>
-    :so-backlog        <backlog>
-    :aggregate-length  <body-aggregate-max-size>}
+   {:loop-thread-count       <threadcount>
+    :disable-epoll           <boolean>
+    :host                    <host>
+    :port                    <port>
+    :chunk-size              <chunk-size>
+    :inbuf                   <input-channel-buffer>
+    :so-backlog              <backlog>
+    :aggregate-length        <body-aggregate-max-size>
+    :response-write-executor <ExecutorService used to run/generate sync responses>}
    ```
 
    `run-server` returns a function of no args which when called will shut
