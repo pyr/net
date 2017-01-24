@@ -7,32 +7,86 @@
            io.netty.channel.ChannelHandlerContext
            io.netty.channel.group.ChannelGroup
            io.netty.channel.group.DefaultChannelGroup
-           io.netty.util.concurrent.GlobalEventExecutor))
-
-(defn ^Channel channel
-  "Extract the channel from a channel holder"
-  [^ChannelHandlerContext channel-holder]
-  (.channel channel-holder))
+           io.netty.util.concurrent.GlobalEventExecutor
+           io.netty.bootstrap.AbstractBootstrap$PendingRegistrationPromise))
 
 (defn await
   "Wait on a channel"
   [^ChannelFuture channel]
   (.await channel))
 
-(defn write!
-  "write a payload to a channel"
-  [^Channel channel msg]
-  (.write channel msg))
+(defn ^Channel channel
+  "Extract the channel from a channel holder"
+  [^AbstractBootstrap$PendingRegistrationPromise channel-holder]
+  (.channel channel-holder))
 
-(defn flush!
-  "flush a channel"
-  [^Channel channel]
-  (.flush channel))
+(defprotocol ChannelResource
+  (write! [this msg] "write a payload to resource")
+  (write-and-flush! [this msg] "write a payload, then flush a resource")
+  (flush! [this] "Request to flush all pending messages")
+  (close! [this] "Request to close resource")
+  (disconnect! [this])
+  (deregister! [this]))
 
-(defn write-and-flush!
-  "write a payload, then flush a channel"
-  [^Channel channel msg]
-  (.writeAndFlush channel msg))
+(extend-type ChannelHandlerContext
+  ChannelResource
+  (write! [ch msg]
+    (.write ch msg))
+
+  (write-and-flush! [ch msg]
+    (.writeAndFlush ch msg))
+
+  (flush! [ch]
+    (.flush ch))
+
+  (close! [ch]
+    (.close ch))
+
+  (disconnect! [ch]
+    (.disconnect ch))
+
+  (deregister! [ch]
+    (.deregister ch)))
+
+(extend-type Channel
+  ChannelResource
+  (write! [ch msg]
+    (.write ch msg))
+
+  (write-and-flush! [ch msg]
+    (.writeAndFlush ch msg))
+
+  (flush! [ch]
+    (.flush ch))
+
+  (close! [ch]
+    (.close ch))
+
+  (disconnect! [ch]
+    (.disconnect ch))
+
+  (deregister! [ch]
+    (.deregister ch)))
+
+(extend-type ChannelGroup
+  ChannelResource
+  (write! [ch-g msg]
+    (.write ch-g msg))
+
+  (write-and-flush! [ch-g msg]
+    (.writeAndFlush ch-g msg))
+
+  (flush! [ch-g]
+    (.flush ch-g))
+
+  (close! [ch]
+    (.close ch))
+
+  (disconnect! [ch]
+    (.disconnect ch))
+
+  (deregister! [ch]
+    (.deregister ch)))
 
 (defn channel-group
   "Create a named channel group"
@@ -51,11 +105,6 @@
   [^ChannelGroup group
    ^Channel chan]
   (.remove group chan))
-
-(defn close!
-  "Close a channel"
-  [^Channel chan]
-  (.close chan))
 
 (defn sync-uninterruptibly!
   "Sync a channel, without interruptions"
