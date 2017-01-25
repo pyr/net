@@ -29,10 +29,15 @@ Net now has full [API Documentation](http://pyr.github.io/net) and
 ## Installation
 
 ```clojure
-    [[spootnik/net "0.3.3-beta4"]]
+    [[spootnik/net "0.3.3-beta6"]]
 ```
 
 ## Changelog
+
+### 0.3.3-beta6
+
+- Allow user-supplied executor for responses (thanks @mpenet).
+- Fix HTTP-related regressions introduced by reflection work.
 
 ### 0.3.3-beta4
 
