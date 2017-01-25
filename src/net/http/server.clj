@@ -266,19 +266,19 @@
 
 (defmulti write-chunk
   "Multimethod used to write into the request's body."
-  (fn [{:keys [aggregate?]} _ _ _ _]
+  (fn [{:keys [aggregate?]} _ _ _ _ _]
     (if aggregate? ::aggregated ::stream)))
 
 (defmethod write-chunk ::aggregated
-  [{:keys [request] :as state} handler ctx msg close?]
+  [{:keys [request] :as state} handler ctx msg executor close?]
   (buf/augment-buffer (:body request) (.content ^FullHttpRequest msg))
   (when close?
     (-> state
         (update :request assoc-body-params)
-        (get-response handler ctx))))
+        (get-response handler ctx executor))))
 
 (defmethod write-chunk ::stream
-  [{:keys [request] :as state} handler ctx msg close?]
+  [{:keys [request] :as state} handler ctx msg executor close?]
   (put! (:body request) msg (backpressure-fn ctx) (close-fn ctx))
   (when close?
     (a/close! (:body request))))
@@ -327,10 +327,10 @@
                                           (buf/new-buffer length length))))))))
 
            (buf/last-http-content? msg)
-           (write-chunk @state handler ctx msg true)
+           (write-chunk @state handler ctx msg response-write-executor true)
 
            (content-chunk? msg)
-           (write-chunk @state handler ctx msg false)
+           (write-chunk @state handler ctx msg response-write-executor false)
 
            :else
            (do
