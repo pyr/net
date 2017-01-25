@@ -40,7 +40,7 @@
   [max-size ^HttpContent content ^HttpContent msg]
   (locking content
     (let [buf    ^ByteBuf @content
-          msg-bb ^ByteBuffer (.content  msg)
+          msg-bb ^ByteBuf (.content  msg)
           msg-sz (.capacity msg-bb)
           buf-sz (if buf (.writerIndex buf) 0)
           new-sz (+ buf-sz msg-sz)
