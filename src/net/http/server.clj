@@ -243,7 +243,7 @@
       (a/take! resp (partial write-response ctx version))
 
       (map? resp)
-      (nc/submit! @executor (write-response ctx version resp))
+      (nc/submit! @executor #(write-response ctx version resp))
 
       :else
       (do
