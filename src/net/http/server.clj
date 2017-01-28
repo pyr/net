@@ -465,3 +465,26 @@
                            (chan/channel))]
          (future (-> channel (chan/close-future) (f/sync!)))
          (bs/shutdown-fn channel boss-group))))))
+
+(def executor? #(instance? java.util.concurrent.ExecutorService %))
+
+(s/def ::loop-thread-count pos-int?)
+(s/def ::disable-epoll boolean?)
+(s/def ::host string?)
+(s/def ::port (s/int-in 1 65536))
+(s/def ::chunk-size pos-int?)
+(s/def ::input-channel-buffer pos-int?)
+(s/def ::so-backlog pos-int?)
+(s/def ::aggregate-length pos-int?)
+(s/def ::response-write-executor executor?)
+
+(s/def ::options (s/keys :opt-un [::loop-thread-count
+                                  ::disable-epoll
+                                  ::host
+                                  ::post
+                                  ::chunk-size
+                                  ::inbuf
+                                  ::so-backlog
+                                  ::aggregate-length
+                                  ::response-write-executor
+                                  ::ring-handler]))
