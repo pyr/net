@@ -1,9 +1,10 @@
-(defproject spootnik/net "0.3.3-beta7"
+(defproject spootnik/net "0.3.3-beta8"
   :description "the clojure netty companion"
   :url "https://github.com/pyr/net"
   :license {:name "MIT License"
             :url  "https://github.com/pyr/net/tree/master/LICENSE"}
-  :plugins [[lein-codox "0.10.2"]]
+  :plugins [[lein-codox   "0.10.2"]
+            [lein-ancient "0.6.10"]]
   :codox {:source-uri  "https://github.com/pyr/net/blob/{version}/{filepath}#L{line}"
           :output-path "docs"
           :namespaces  [#"^net"]
@@ -19,7 +20,7 @@
                    :dependencies   [[org.slf4j/slf4j-api        "1.7.22"]
                                     [org.slf4j/slf4j-log4j12    "1.7.22"]
                                     [org.clojure/test.check     "0.9.0"]
-                                    [com.stuartsierra/component "0.3.1"]]}}
+                                    [com.stuartsierra/component "0.3.2"]]}}
   :dependencies [[org.clojure/clojure       "1.9.0-alpha14"]
                  [org.clojure/core.async    "0.2.395"]
                  [org.clojure/tools.logging "0.3.1"]

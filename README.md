@@ -29,10 +29,14 @@ Net now has full [API Documentation](http://pyr.github.io/net) and
 ## Installation
 
 ```clojure
-    [[spootnik/net "0.3.3-beta7"]]
+    [[spootnik/net "0.3.3-beta8"]]
 ```
 
 ## Changelog
+
+### 0.3.3-beta8
+
+- specs for http server options
 
 ### 0.3.3-beta7
 
