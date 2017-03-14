@@ -5,6 +5,7 @@
            io.netty.channel.ChannelFutureListener
            io.netty.channel.Channel
            io.netty.channel.ChannelHandlerContext
+           io.netty.channel.DefaultchannelPromise
            io.netty.channel.group.ChannelGroup
            io.netty.channel.group.DefaultChannelGroup
            io.netty.util.concurrent.GlobalEventExecutor
@@ -57,6 +58,11 @@
 
   (deregister! [ch]
     (.deregister ch)))
+
+(extend-type DefaultChannelPromise
+  ChannelHolder
+  (get-channel [this]
+    (.channel this)))
 
 (extend-type Channel
   ChannelHolder
