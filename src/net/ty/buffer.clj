@@ -5,6 +5,7 @@
   (:require [clojure.tools.logging :refer [debug]])
   (:import io.netty.buffer.Unpooled
            io.netty.buffer.ByteBuf
+           io.netty.buffer.ByteBufHolder
            io.netty.handler.codec.http.DefaultHttpResponse
            io.netty.handler.codec.http.DefaultHttpContent
            io.netty.handler.codec.http.DefaultLastHttpContent
@@ -12,6 +13,20 @@
            io.netty.handler.codec.http.HttpContent
            io.netty.handler.codec.http.LastHttpContent
            java.nio.ByteBuffer))
+
+(defprotocol Bufferizable
+  (as-buffer [this]))
+
+(extend-protocol Bufferizable
+  ByteBufHolder
+  (as-buffer [this] (.content this))
+  ByteBuf
+  (as-buffer [this] this))
+
+(defn bufsize
+  [x]
+  (when-let [buf ^ByteBuf (as-buffer x)]
+    (.writerIndex buf)))
 
 (defn buffer-holder
   "Create a buffer holder (internally a volatile)."
