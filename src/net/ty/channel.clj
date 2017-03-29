@@ -5,7 +5,7 @@
            io.netty.channel.ChannelFutureListener
            io.netty.channel.Channel
            io.netty.channel.ChannelHandlerContext
-           io.netty.channel.DefaultchannelPromise
+           io.netty.channel.DefaultChannelPromise
            io.netty.channel.group.ChannelGroup
            io.netty.channel.group.DefaultChannelGroup
            io.netty.util.concurrent.GlobalEventExecutor
