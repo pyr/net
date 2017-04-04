@@ -1,4 +1,4 @@
-(defproject spootnik/net "0.3.3-beta10"
+(defproject spootnik/net "0.3.3-beta12"
   :description "the clojure netty companion"
   :url "https://github.com/pyr/net"
   :license {:name "MIT License"
@@ -21,8 +21,8 @@
                                     [org.slf4j/slf4j-log4j12    "1.7.22"]
                                     [org.clojure/test.check     "0.9.0"]
                                     [com.stuartsierra/component "0.3.2"]]}}
-  :dependencies [[org.clojure/clojure       "1.9.0-alpha14"]
-                 [org.clojure/core.async    "0.2.395"]
+  :dependencies [[org.clojure/clojure       "1.9.0-alpha15"]
+                 [org.clojure/core.async    "0.3.442"]
                  [org.clojure/tools.logging "0.3.1"]
-                 [io.netty/netty-all        "4.1.8.Final"]]
+                 [io.netty/netty-all        "4.1.9.Final"]]
   :global-vars {*warn-on-reflection* true})
