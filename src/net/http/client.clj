@@ -199,10 +199,10 @@
 
 (defn data->request
   "Produce a valid request from a "
-  [{:keys [body headers request-method version query uri auth]}]
+  [{:keys [body headers method version query uri auth]}]
   (let [uri     (data->uri uri query)
         version (data->version version)
-        method  (data->method request-method)
+        method  (data->method method)
         path    (str (.getRawPath uri) "?" (.getRawQuery uri))
         request (DefaultFullHttpRequest. version method path)]
     (data->headers (.headers request) headers (.getHost uri))
