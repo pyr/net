@@ -21,7 +21,7 @@
                                     [org.slf4j/slf4j-log4j12    "1.7.22"]
                                     [org.clojure/test.check     "0.9.0"]
                                     [com.stuartsierra/component "0.3.2"]]}}
-  :dependencies [[org.clojure/clojure       "1.9.0-alpha15"]
+  :dependencies [[org.clojure/clojure       "1.9.0-alpha16"]
                  [org.clojure/core.async    "0.3.442"]
                  [org.clojure/tools.logging "0.3.1"]
                  [io.netty/netty-all        "4.1.9.Final"]]
