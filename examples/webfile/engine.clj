@@ -56,7 +56,37 @@
     (.close chan))
   (inc i))
 
+(defn body-for
+  [uri]
+  (cond
+    (re-find #"(?i)stream" uri)
+    {:status  200
+     :headers {"Content-Transfer" "chunked"}
+     :body    (let [body (a/chan)]
+                (a/go
+                  (dotimes [i 5]
+                    (a/<! (a/timeout 1000))
+                    (a/>! body "foobar\n"))
+                  (a/close! body))
+                body)}
+
+    (re-find #"(?i)delay" uri)
+    (a/go
+      (a/<! (a/timeout 3000))
+      {:status  200
+       :headers {"Connection" "close"}
+       :body    "sorry, running late!\n"})
+
+    ::else
+    {:status 200
+     :headers {"Connection" "close"}
+     :body    "A standard body\n"}))
+
 (defmulti handle-operation (fn [_ op _ _] op))
+
+(defmethod handle-operation :get
+  [_ _ uri _]
+  (body-for uri))
 
 (defmethod handle-operation :put
   [{:keys [root]} _ uri body]
