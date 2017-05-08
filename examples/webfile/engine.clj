@@ -49,7 +49,7 @@
 
 (defn write-bufs
   [root uri i http-content]
-  (let [path (path-for root uri i)
+  (let [path (path-for root uri (format "%02d" i))
         chan (FileChannel/open path open-options)]
     (doseq [buf (buffers-from http-content)]
       (write-nio-buffer chan buf))
