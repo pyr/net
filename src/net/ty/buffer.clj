@@ -24,9 +24,11 @@
   (as-buffer [this] this))
 
 (defn bufsize
+  "Given something that can be coerced to a ByteBuf,
+   return available bytes."
   [x]
   (when-let [buf ^ByteBuf (as-buffer x)]
-    (.writerIndex buf)))
+    (- (.writerIndex buf) (.readerIndex buf))))
 
 (defn buffer-holder
   "Create a buffer holder (internally a volatile)."
