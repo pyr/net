@@ -100,7 +100,7 @@
    (map (fn [[stringk vlist]]
           (let [vs (seq vlist)
                 k  (keyword (str stringk))]
-            [k (if (pos? (count vs)) (first vs) vs)])))
+            [k (if (= 1 (count vs)) (first vs) vs)])))
    (.parameters dx)))
 
 (defn qs->body-params
