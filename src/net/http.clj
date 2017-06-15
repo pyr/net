@@ -1,6 +1,6 @@
 (ns net.http
   "Functions common to HTTP clients and servers"
-  (:require [clojure.spec :as s])
+  (:require [clojure.spec.alpha :as s])
   (:import io.netty.channel.ChannelHandlerContext
            io.netty.channel.ChannelHandlerAdapter
            io.netty.channel.ChannelInboundHandlerAdapter
