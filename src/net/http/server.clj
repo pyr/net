@@ -18,7 +18,7 @@
             [net.http              :as http]
             [net.core.concurrent   :as nc]
             [clojure.core.async    :as a]
-            [clojure.spec          :as s]
+            [clojure.spec.alpha         :as s]
             [net.core.async        :refer [put!]]
             [clojure.tools.logging :refer [debug info warn error]])
   (:import io.netty.channel.ChannelHandlerContext

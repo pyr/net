@@ -3,7 +3,7 @@
   (:require [net.codec.b64      :as b64]
             [net.ssl            :as ssl]
             [net.http           :as http]
-            [clojure.spec       :as s]
+            [clojure.spec.alpha       :as s]
             [clojure.core.async :as async])
   (:import io.netty.bootstrap.Bootstrap
            io.netty.buffer.ByteBuf

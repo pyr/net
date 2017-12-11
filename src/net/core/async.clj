@@ -4,7 +4,7 @@
    Some bits shamelessly stolen from @mpenet's jet,
    See https://github.com/mpenet/jet for original"
   (:require [clojure.core.async :as async]
-            [clojure.spec       :as s]))
+            [clojure.spec.alpha       :as s]))
 
 (defn put!
   "Takes a `ch`, a `msg`, a single arg function that when passed
