@@ -24,5 +24,5 @@
   :dependencies [[org.clojure/clojure       "1.9.0"]
                  [org.clojure/core.async    "0.3.465"]
                  [org.clojure/tools.logging "0.4.0"]
-                 [io.netty/netty-all        "4.1.18.Final"]]
+                 [io.netty/netty-all        "4.1.19.Final"]]
   :global-vars {*warn-on-reflection* true})
