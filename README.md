@@ -1,6 +1,8 @@
 net: the clojure netty companion
 ================================
 
+[![Build Status](https://secure.travis-ci.org/pyr/net.png)](http://travis-ci.org/pyr/net)
+
 Net provides a clojure foundation to implement asynchronous networking
 based on netty.
 
