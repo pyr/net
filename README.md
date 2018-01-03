@@ -32,14 +32,23 @@ Net now has full [API Documentation](http://pyr.github.io/net) and
 ## Installation
 
 ```clojure
-    [[spootnik/net "0.3.3-beta9"]]
+    [[spootnik/net "0.3.3-beta14"]]
 ```
 
 ## Changelog
 
+### 0.3.3-beta14
+
+- Depend on netty 4.1.19.Final
+- Add ByteBuf collection transducers
+- Handle Http server callback on an executor
+- Improve netty facade
+- Add ByteBuf manipulation tooling
+- Circumvent CLJ-1814 as much as possible
+
 ### 0.3.3-beta9
 
-- Depend on netty 4.1.8-Final
+- Depend on netty 4.1.8.Final
 
 ### 0.3.3-beta8
 
