@@ -16,9 +16,11 @@
             [net.ty.bootstrap      :as bs]
             [net.ty.channel        :as chan]
             [net.http              :as http]
+            [net.http.chunk        :as chunk]
             [net.core.concurrent   :as nc]
             [clojure.core.async    :as a]
-            [clojure.spec.alpha         :as s]
+            [clojure.spec.alpha    :as s]
+            [clojure.string        :as str]
             [net.core.async        :refer [put!]]
             [clojure.tools.logging :refer [debug info warn error]])
   (:import io.netty.channel.ChannelHandlerContext
@@ -68,128 +70,9 @@
            clojure.core.async.impl.protocols.Channel))
 
 (def default-chunk-size "" (* 16 1024 1024))
-
-(def default-inbuf "" 10)
-
+(def default-inbuf "" 100)
 (def default-aggregated-length "" (* 1024 1024))
 
-(def default-response-write-executor "" (delay (nc/executor :cached)))
-
-(def ^:dynamic *request-ctx* nil)
-
-(defn int->status
-  "Get a Netty HttpResponseStatus from a int"
-  [status]
-  (HttpResponseStatus/valueOf (int status)))
-
-(defn data->response
-  "Create a valid HttpResponse from a response map."
-  [{:keys [status headers]} version]
-  (let [code (int->status status)
-        resp (DefaultHttpResponse. version code)
-        hmap (.headers resp)]
-    (doseq [[k v] headers]
-      (.set hmap (name k) v))
-    resp))
-
-(defn ->params
-  "Create a param map from a Netty QueryStringDecoder"
-  [^QueryStringDecoder dx]
-  (into
-   {}
-   (map (fn [[stringk vlist]]
-          (let [vs (seq vlist)
-                k  (keyword (str stringk))]
-            [k (if (= 1 (count vs)) (first vs) vs)])))
-   (.parameters dx)))
-
-(defn qs->body-params
-  "Extract body parameters from a body when application"
-  [{:keys [headers body]}]
-  (when-let [^String content-type (:content-type headers)]
-    (when (.startsWith content-type "application/x-www-form-urlencoded")
-      (->params
-       (QueryStringDecoder. (http/bb->string body) false)))))
-
-(defn assoc-body-params
-  "Add found query and body parameters (when applicable) to a request map"
-  [request]
-  (let [bp (qs->body-params request)]
-    (cond-> request
-      bp (assoc :body-params bp)
-      bp (update :params merge bp))))
-
-(defn input-stream-chunk
-  "Fill up a ByteBuf with the contents of an input stream"
-  [^InputStream is]
-  (let [buf (Unpooled/buffer (.available is))]
-    (loop [len (.available is)]
-      (when (pos? len)
-        (.writeBytes buf is len)
-        (recur (.available is))))
-    buf))
-
-(defn file-chunk
-  "Create an input stream chunk from a File"
-  [^File f]
-  (input-stream-chunk (FileInputStream. f)))
-
-(defprotocol ChunkEncoder
-  "A simple encoding protocol for chunks"
-  (chunk->http-object [chunk] "Convert Chunk to http-object"))
-
-;;
-;; Provide ChunkEncoder implementation for common types,
-;; This allows net to be flexible
-(extend-protocol ChunkEncoder
-  (Class/forName "[B")
-  (chunk->http-object [chunk]
-    (DefaultHttpContent. (Unpooled/wrappedBuffer ^"[B" chunk)))
-
-  ByteBuffer
-  (chunk->http-object [chunk]
-    (DefaultHttpContent. (Unpooled/wrappedBuffer chunk)))
-
-  ByteBuf
-  (chunk->http-object [chunk]
-    (DefaultHttpContent. chunk))
-
-  InputStream
-  (chunk->http-object [chunk]
-    (DefaultHttpContent. (input-stream-chunk chunk)))
-
-  File
-  (chunk->http-object [chunk]
-    (DefaultHttpContent. (file-chunk chunk)))
-
-  String
-  (chunk->http-object [chunk]
-    (DefaultHttpContent. (Unpooled/wrappedBuffer (.getBytes chunk "UTF8"))))
-
-  HttpContent
-  (chunk->http-object [chunk] chunk))
-
-(defn content-chunk?
-  "Predicate to check for ChunkEncoder compliance"
-  [x]
-  (satisfies? ChunkEncoder x))
-
-(defn ->request
-  "Create a request map from a Netty Http Request"
-  [^HttpRequest msg]
-  (let [dx      (QueryStringDecoder. (.getUri msg))
-        headers (http/headers (.headers msg))
-        p1      (->params dx)]
-    {:uri            (.path dx)
-     :get-params     p1
-     :params         p1
-     :request-method (http/method->data (.getMethod msg))
-     :version        (-> msg .getProtocolVersion .text)
-     :headers        headers}))
-
-(def last-http-content
-  "Empty Last Http Content"
-  LastHttpContent/EMPTY_LAST_CONTENT)
 
 ;; A Netty ChannelFutureListener used when writing in chunks
 ;; read from a body.
@@ -202,26 +85,31 @@
 ;; When called with an actual future, apply the same logic, re-using the listener
 ;; up to the point where no more chunks have to be sent out or an error occurs.
 (f/deflistener write-response-listener
-  [this ftr [^ChannelHandlerContext ctx ^Channel body]]
-  (if (or (nil? ftr) (f/complete? ftr))
-    (let [chunk (a/<!! body)
-          msg   (if chunk (chunk->http-object chunk) last-http-content)]
-      (-> (chan/write-and-flush! ctx msg)
-          (f/add-listener (if chunk this f/close-listener))))
-    (a/close! body)))
+  [this ftr [^ChannelHandlerContext ctx ^Channel body executor]]
+  (nc/with-executor executor
+    (if (or (nil? ftr) (f/complete? ftr))
+      (let [chunk (a/<!! body)
+            msg   (if chunk (chunk/chunk->http-object chunk) http/last-http-content)]
+        (-> (chan/write-and-flush! ctx msg)
+            (f/add-listener (if chunk this f/close-listener))))
+      (a/close! body))))
 
 (defn write-response
   "Write an HTTP response out to a Netty Context"
-  [^ChannelHandlerContext ctx ^HttpVersion version {:keys [body] :as resp}]
-  (.writeAndFlush ctx (data->response resp version))
-  (let [listener (write-response-listener ctx body)]
+  [^ChannelHandlerContext ctx executor resp body]
+  (f/with-result [ftr (.writeAndFlush ctx resp)]
     (cond
-      (content-chunk? body)
-      (-> (chan/write-and-flush! ctx (chunk->http-object body))
-          (f/add-close-listener))
+      (chunk/content-chunk? body)
+      (f/with-result [ftr (chan/write-and-flush! ctx (chunk/chunk->http-object body))]
+        (chan/close! (chan/channel ftr)))
 
       (instance? Channel body)
-      (f/operation-complete listener))))
+      (do
+        (f/operation-complete (write-response-listener ctx body executor)))
+
+      ::else
+      (f/with-result [ftr (chan/write-and-flush! ctx http/last-http-content)]
+        (chan/close! (chan/channel ftr))))))
 
 (defn parse-num
   "Parse a long integer, returning nil on failure"
@@ -233,30 +121,42 @@
   [{:keys [headers] :as req}]
   (some-> (:content-length headers) parse-num))
 
+(defn try-wait
+  [x]
+  (try
+    (cond
+      (instance? Channel x)
+      (debug "waiting on response channel")
+
+      (not (map? x))
+      (throw (IllegalArgumentException. "unhandled response type")))
+    (if (instance? Channel x)
+      (a/<!! x)
+      x)
+    (catch Exception e
+      (error e "was not able to get back response")
+      {:status 500 :body "argh"})))
+
 (defn get-response
   "When an aggregated request is done buffereing,
    Execute the handler on it and publish the response."
   [{:keys [request version]} handler ctx executor]
-  (let [resp (handler request)]
-    (cond
-      (instance? Channel resp)
-      (a/take! resp (partial write-response ctx version))
+  (nc/with-executor executor
 
-      (map? resp)
-      (nc/submit! @executor #(write-response ctx version resp))
+    (let [
+          intermediate            (handler request)
 
-      :else
-      (do
-        (error "unhandled response body type" (pr-str resp))
-        (throw (IllegalArgumentException. "unhandled response body type"))))))
+          {:keys [body] :as resp} (try-wait intermediate)]
+      (write-response ctx executor (http/data->response resp version) body))))
 
 (defn backpressure-fn
   "Stop automatically reading from the body channel when we are signalled
    for backpressure."
   [ctx]
-  (fn [enable?]
-    (warn "switching backpressure mode to:" enable?)
-    (-> ctx chan/channel .config (.setAutoRead (not enable?)))))
+  (let [cfg (-> ctx chan/channel .config)]
+    (fn [enable?]
+      ;;    (warn "switching backpressure mode to:" enable?)
+      (.setAutoRead cfg (not enable?)))))
 
 (defn close-fn
   "A closure over a context that will close it when called."
@@ -264,25 +164,18 @@
   (fn []
     (-> ctx chan/channel chan/close-future)))
 
-(defmulti write-chunk
-  "Multimethod used to write into the request's body."
-  (fn [{:keys [aggregate?]} _ _ _ _ _]
-    (if aggregate? ::aggregated ::stream)))
-
-(defmethod write-chunk ::aggregated
+(defn write-chunk
   [{:keys [request] :as state} handler ctx msg executor close?]
-  (buf/augment-buffer (:body request) (.content ^FullHttpRequest msg))
-  (when close?
-    (-> state
-        (update :request assoc-body-params)
-        (get-response handler ctx executor))))
-
-(defmethod write-chunk ::stream
-  [{:keys [request] :as state} handler ctx msg executor close?]
+  (comment (a/put! (:body request) msg))
   (put! (:body request) msg (backpressure-fn ctx) (close-fn ctx))
   (when close?
     (a/close! (:body request))))
 
+(defn send-100-continue-fn
+  [^ChannelHandlerContext ctx ^HttpRequest msg]
+  (let [version (.protocolVersion msg)]
+    (fn []
+      (.writeAndFlush ctx (DefaultFullHttpResponse. version HttpResponseStatus/CONTINUE)))))
 
 (defn ^ChannelHandler netty-handler
   "This is a stateful, per HTTP session adapter which wraps the user
@@ -291,15 +184,13 @@
    nature of handler adapters."
   ([handler]
    (netty-handler handler {}))
-  ([handler {:keys [inbuf aggregate-length response-write-executor]}]
-   (let [inbuf                   (or inbuf default-inbuf)
-         agg-length              (or aggregate-length default-aggregated-length)
-         response-write-executor (or response-write-executor
-                                     default-response-write-executor)
-         state                   (volatile! {:aggregate? false})]
+  ([handler {:keys [inbuf aggregate-length executor]}]
+   (let [inbuf      (or inbuf default-inbuf)
+         agg-length (or aggregate-length default-aggregated-length)
+         state      (volatile! {})]
      (proxy [ChannelInboundHandlerAdapter] []
        (exceptionCaught [^ChannelHandlerContext ctx e]
-         (error e "exception caught!")
+         (error e "netty exception caught!")
          (handler {:type           :error
                    :request-method :error
                    :error          e
@@ -308,59 +199,22 @@
          (cond
            (instance? HttpRequest msg)
            (do
-             ;; 100-Continue
-             (when (HttpUtil/is100ContinueExpected msg)
-               (.write ctx (DefaultFullHttpResponse. HttpVersion/HTTP_1_1
-                                                     HttpResponseStatus/CONTINUE)))
              (vswap! state assoc
-                     :version (.getProtocolVersion ^HttpRequest msg)
-                     :request (->request msg))
-             (let [length (request-length (:request @state))]
-               (if (or (nil? length) (> length agg-length))
-                 (do
-                   (vswap! state assoc-in [:request :body] (a/chan inbuf))
-                   (get-response @state handler ctx response-write-executor))
-                 (do
-                   (vswap! state
-                           #(-> (assoc % :aggregate? true)
-                                (assoc-in [:request :body]
-                                          (buf/new-buffer length length))))))))
+                     :version (.protocolVersion ^HttpRequest msg)
+                     :request (assoc (http/->request msg)
+                                     :body (a/chan inbuf)
+                                     :is-100-continue-expected? (HttpUtil/is100ContinueExpected msg)
+                                     :send-100-continue! (send-100-continue-fn ctx msg)))
+             (get-response @state handler ctx executor))
 
-           (buf/last-http-content? msg)
-           (write-chunk @state handler ctx msg response-write-executor true)
-
-           (content-chunk? msg)
-           (write-chunk @state handler ctx msg response-write-executor false)
+           (chunk/content-chunk? msg)
+           (write-chunk @state handler ctx (-> msg buf/as-buffer)
+                        executor (http/last-http-content? msg))
 
            :else
            (do
              (error "unhandled message chunk on body channel")
              (throw (IllegalArgumentException. "unhandled message chunk on body channel")))))))))
-
-(defn ^io.netty.handler.codec.MessageToMessageDecoder body-decoder
-  "To simplify the life of downstream consumers, we
-   create fixed-size chunks. For example, for an input
-   payload of 42M and a chunk size of 16M, the handler
-   function will be fed a channel containing 3 elements:
-   2 16M chunks and a 10M one."
-  [max-size]
-  (let [content (buf/buffer-holder)]
-    (proxy [io.netty.handler.codec.MessageToMessageDecoder] []
-      (isSharable []
-        false)
-      (decode [^ChannelHandlerContext ctx msg ^java.util.List out]
-        (try
-          (cond
-            (instance? HttpRequest msg)
-            (.add out ^HttpRequest msg)
-
-            (buf/last-http-content? msg)
-            (doseq [chunk (buf/release-contents max-size content msg)]
-              (.add out chunk))
-
-            :else
-            (when-let [chunk (buf/update-content max-size content msg)]
-              (.add out chunk))))))))
 
 (defn initializer
   "An initializer is a per-connection context creator.
@@ -372,14 +226,11 @@
     :as   opts}]
   (proxy [ChannelInitializer] []
     (initChannel [channel]
-      (let [handler-opts (select-keys opts [:inbuf :aggregate-length
-                                            :response-write-executor])
+      (let [handler-opts (select-keys opts [:inbuf :aggregate-length :executor])
             codec        (HttpServerCodec. 4096 8192 (int chunk-size))
-            aggregator   (body-decoder chunk-size)
             handler      (netty-handler ring-handler handler-opts)
             pipeline     (.pipeline ^io.netty.channel.Channel channel)]
         (.addLast pipeline "codec"       codec)
-        (.addLast pipeline "aggregator" aggregator)
         (.addLast pipeline "handler"    handler)))))
 
 (defn set-so-backlog!
@@ -391,6 +242,10 @@
   "Extract host and port from a server options map, providing defaults"
   [{:keys [host port]}]
   [(or host "127.0.0.1") (or port 8080)])
+
+(defn default-executor
+  []
+  (nc/executor :fixed {:num-threads 10}))
 
 (defn run-server
   "Create and run an HTTP server handler.
@@ -441,7 +296,7 @@
     :inbuf                   <input-channel-buffer>
     :so-backlog              <backlog>
     :aggregate-length        <body-aggregate-max-size>
-    :response-write-executor <ExecutorService used to run/generate sync responses>}
+    :executor                <ExecutorService used to run/generate sync responses>}
    ```
 
    `run-server` returns a function of no args which when called will shut
@@ -463,7 +318,8 @@
                            (bs/bind! host port)
                            (f/sync!)
                            (chan/channel))]
-         (future (-> channel (chan/close-future) (f/sync!)))
+         (nc/with-executor (or (:executor options) (default-executor))
+           (-> channel (chan/close-future) (f/sync!)))
          (bs/shutdown-fn channel boss-group))))))
 
 (def executor? #(instance? java.util.concurrent.ExecutorService %))
@@ -476,7 +332,7 @@
 (s/def ::input-channel-buffer pos-int?)
 (s/def ::so-backlog pos-int?)
 (s/def ::aggregate-length pos-int?)
-(s/def ::response-write-executor executor?)
+(s/def ::executor executor?)
 
 (s/def ::options (s/keys :opt-un [::loop-thread-count
                                   ::disable-epoll
@@ -486,5 +342,5 @@
                                   ::inbuf
                                   ::so-backlog
                                   ::aggregate-length
-                                  ::response-write-executor
+                                  ::executor
                                   ::ring-handler]))
