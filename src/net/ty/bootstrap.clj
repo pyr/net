@@ -82,7 +82,7 @@
   (when-not (s/valid? ::server-bootstrap-schema config)
     (throw (IllegalArgumentException. "invalid server bootstrap configuration")))
   (let [bs (ServerBootstrap.)
-        group ^EventLoopGroup (:child-group config)]
+        group ^EventLoopGroup (:group config)]
     (if-let [c ^EventLoopGroup (:child-group config)]
       (.group bs (or group (epoll-event-loop-group)) c)
       (.group bs (or group (epoll-event-loop-group))))
