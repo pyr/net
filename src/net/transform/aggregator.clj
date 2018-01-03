@@ -34,7 +34,7 @@
            nil
            (conj bufs (cond->> slice (some? kept) (buf/augment-composite kept)))))
 
-        ::else
+        :else
         [(buf/augment-composite (kept-buf) (buf/read-retained-slice buf)) bufs]))))
 
 (defn raw-aggregator

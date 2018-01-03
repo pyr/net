@@ -107,7 +107,7 @@
       (do
         (f/operation-complete (write-response-listener ctx body executor)))
 
-      ::else
+      :else
       (f/with-result [ftr (chan/write-and-flush! ctx http/last-http-content)]
         (chan/close! (chan/channel ftr))))))
 
@@ -142,7 +142,7 @@
         (map? resp)
         (respond! resp)
 
-        ::else
+        :else
         (throw (IllegalArgumentException. "unhandled response type"))))))
 
 (defn backpressure-fn

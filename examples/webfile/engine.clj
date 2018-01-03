@@ -77,7 +77,7 @@
        :headers {"Connection" "close"}
        :body    "sorry, running late!\n"})
 
-    ::else
+    :else
     {:status 200
      :headers {"Connection" "close"}
      :body    "A standard body\n"}))

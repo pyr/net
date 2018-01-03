@@ -16,7 +16,7 @@
       (uncaughtException [_ thread e]
         (x {:thread thread :exception e})))
 
-    ::else
+    :else
     (throw (IllegalArgumentException. "Invalid exception-catcher parameter"))))
 
 (defn uncaught-catching-thread-factory

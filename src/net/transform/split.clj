@@ -54,7 +54,7 @@
          (cond->> (buf/read-retained-slice buf (- need kept-len))
            (some? kept) (buf/augment-composite kept))]
 
-        ::else
+        :else
         [(assoc this
                 :kept (buf/augment-composite (or kept (buf/composite))
                                              (buf/read-retained-slice buf))
