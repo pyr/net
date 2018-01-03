@@ -143,9 +143,7 @@
   [{:keys [request version]} handler ctx executor]
   (nc/with-executor executor
 
-    (let [
-          intermediate            (handler request)
-
+    (let [intermediate            (handler request)
           {:keys [body] :as resp} (try-wait intermediate)]
       (write-response ctx executor (http/data->response resp version) body))))
 
@@ -155,7 +153,6 @@
   [ctx]
   (let [cfg (-> ctx chan/channel .config)]
     (fn [enable?]
-      ;;    (warn "switching backpressure mode to:" enable?)
       (.setAutoRead cfg (not enable?)))))
 
 (defn close-fn
@@ -175,7 +172,9 @@
   [^ChannelHandlerContext ctx ^HttpRequest msg]
   (let [version (.protocolVersion msg)]
     (fn []
-      (.writeAndFlush ctx (DefaultFullHttpResponse. version HttpResponseStatus/CONTINUE)))))
+      (.writeAndFlush ctx
+                      (DefaultFullHttpResponse. version
+                                                HttpResponseStatus/CONTINUE)))))
 
 (defn ^ChannelHandler netty-handler
   "This is a stateful, per HTTP session adapter which wraps the user
