@@ -3,7 +3,8 @@
   (:require [net.codec.b64      :as b64]
             [net.ssl            :as ssl]
             [net.http           :as http]
-            [clojure.spec.alpha       :as s]
+            [net.ty.buffer      :as buf]
+            [clojure.spec.alpha :as s]
             [clojure.core.async :as async])
   (:import io.netty.bootstrap.Bootstrap
            io.netty.buffer.ByteBuf
@@ -51,10 +52,10 @@
   (fn []
     (try
       (let [headers (http/headers (.headers msg))
-            body    (http/bb->string (.content msg))
-            req     {:status         (some-> msg .getStatus .code)
+            body    (buf/to-string (.content msg))
+            req     {:status         (some-> msg .status .code)
                      :headers        headers
-                     :version        (-> msg .getProtocolVersion .text)
+                     :version        (-> msg .protocolVersion .text)
                      :body           body}]
         (f req))
       (finally
