@@ -8,13 +8,24 @@
            io.netty.channel.DefaultChannelPromise
            io.netty.channel.group.ChannelGroup
            io.netty.channel.group.DefaultChannelGroup
+           io.netty.util.AttributeKey
+           io.netty.util.Attribute
            io.netty.util.concurrent.GlobalEventExecutor
            io.netty.bootstrap.AbstractBootstrap$PendingRegistrationPromise))
 
-(defn await
+(defn await!
   "Wait on a channel"
   [^ChannelFuture channel]
   (.await channel))
+
+(defn read!
+  "Schedule read on a channel, preferably one with setAutoRead set to false"
+  [^Channel channel]
+  (.read channel))
+
+(defn active?
+  [^Channel channel]
+  (.isActive channel))
 
 (defprotocol ChannelHolder
   (get-channel [this] "Extract channel from holder"))
@@ -134,3 +145,51 @@
   "Get the close future for a channel"
   [^Channel chan]
   (.closeFuture chan))
+
+(defn get-attr-key
+  [k]
+  (let [sk (str k)]
+    (if (AttributeKey/exists sk)
+      (AttributeKey/valueOf sk)
+      (AttributeKey/newInstance sk))))
+
+(defn ^Attribute get-attr
+  [^Channel chan k]
+  (.attr chan (get-attr-key k)))
+
+(defn set-attr!
+  [^Channel chan k v]
+  (let [attr (get-attr chan k)]
+    (.set attr v)))
+
+(defn compare-and-set-attr!
+  [^Channel chan k prev next]
+  (let [attr (get-attr chan k)]
+    (.compareAndSet attr prev next)))
+
+(defn get-and-set-attr!
+  [^Channel chan k v]
+  (let [attr (get-attr chan k)]
+    (.getAndSet attr v)))
+
+(defn set-attr-if-absent!
+  [^Channel chan k v]
+  (let [attr (get-attr chan k)]
+    (.setIfAbsent attr v)))
+
+(defn get-attr-value
+  [^Channel chan k]
+  (let [attr (get-attr chan k)]
+    (.get attr)))
+
+(defn get-and-remove-attr!
+  [^Channel chan k]
+  (let [attr (get-attr chan k)
+        val   (.get attr)]
+    (.set attr nil)
+    val))
+
+(defn remove-attr!
+  [^Channel chan k]
+  (let [attr (get-attr chan k)]
+    (.set attr nil)))
