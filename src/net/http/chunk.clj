@@ -26,40 +26,44 @@
 
 (defprotocol ChunkEncoder
   "A simple encoding protocol for chunks"
-  (chunk->http-object [chunk] "Convert Chunk to http-object"))
+  (any->http-object [chunk] "Convert arbitrary data to an HttpContent instance"))
 
-;;
-;; Provide ChunkEncoder implementation for common types,
-;; This allows net to be flexible
-(extend-protocol ChunkEncoder
-  (Class/forName "[B")
-  (chunk->http-object [chunk]
-    (DefaultHttpContent. (Unpooled/wrappedBuffer ^"[B" chunk)))
+(defn chunk->http-object
+  [chunk]
+  (cond
+    (bytes? chunk)
+    (DefaultHttpContent. (Unpooled/wrappedBuffer ^"[B" chunk))
 
-  ByteBuffer
-  (chunk->http-object [chunk]
-    (DefaultHttpContent. (Unpooled/wrappedBuffer chunk)))
+    (string? chunk)
+    (DefaultHttpContent. (Unpooled/wrappedBuffer
+                          (.getBytes ^String chunk "UTF8")))
 
-  ByteBuf
-  (chunk->http-object [chunk]
-    (DefaultHttpContent. chunk))
+    (instance? ByteBuf chunk)
+    (DefaultHttpContent. chunk)
 
-  InputStream
-  (chunk->http-object [chunk]
-    (DefaultHttpContent. (input-stream-chunk chunk)))
+    (instance? ByteBuffer chunk)
+    (DefaultHttpContent. (Unpooled/wrappedBuffer ^ByteBuffer chunk))
 
-  File
-  (chunk->http-object [chunk]
-    (DefaultHttpContent. (file-chunk chunk)))
+    (instance? InputStream chunk)
+    (DefaultHttpContent. (input-stream-chunk chunk))
 
-  String
-  (chunk->http-object [chunk]
-    (DefaultHttpContent. (Unpooled/wrappedBuffer (.getBytes chunk "UTF8"))))
+    (instance? File chunk)
+    (DefaultHttpContent. (file-chunk chunk))
 
-  HttpContent
-  (chunk->http-object [chunk] chunk))
+    (satisfies? ChunkEncoder chunk)
+    (any->http-object chunk)
+
+    :else
+    (throw (IllegalArgumentException. "Cannot coerce to HttpContent"))))
 
 (defn content-chunk?
   "Predicate to check for ChunkEncoder compliance"
   [x]
-  (satisfies? ChunkEncoder x))
+  (or (bytes? x)
+      (string? x)
+      (instance? ByteBuf x)
+      (instance? HttpContent x)
+      (instance? ByteBuffer x)
+      (instance? InputStream x)
+      (instance? File x)
+      (satisfies? ChunkEncoder x)))
