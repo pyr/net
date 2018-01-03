@@ -133,7 +133,7 @@
    Execute the handler on it and publish the response."
   [{:keys [request version]} handler ctx executor]
   (nc/with-executor executor
-    (let [retval   (handler request)
+    (let [resp     (handler request)
           respond! (partial write-response ctx executor version)]
       (cond
         (instance? Channel resp)
@@ -143,7 +143,7 @@
         (respond! resp)
 
         ::else
-        (throw (IllegalArgumentExecption. "unhandled response type"))))))
+        (throw (IllegalArgumentException. "unhandled response type"))))))
 
 (defn backpressure-fn
   "Stop automatically reading from the body channel when we are signalled
