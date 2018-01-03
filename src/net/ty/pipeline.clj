@@ -277,6 +277,19 @@
   ([charset]
    (StringEncoder. (charset->charset-util charset))))
 
+(defn supported-signatures
+  [adapter]
+  (cond-> #{}
+    (satisfies? IsSharable)                (conj :is-sharable?)
+    (satisfies? ChannelActive)             (conj :channel-active)
+    (satisfies? ChannelInactive)           (conj :channel-inactive)
+    (satisfies? ChannelReadComplete)       (conj :channel-read-complete)
+    (satisfies? ChannelRegistered)         (conj :channel-registered)
+    (satisfies? ChannelUnregistered)       (conj :channel-unregistered)
+    (satisfies? ChannelWritabilityChanged) (conj :channel-writability-changed)
+    (satisfies? UserEventTriggered)        (conj :user-event-triggered)
+    (satisfies? ExceptionCaught)           (conj :exception-caught)))
+
 (defn make-handler-adapter
   "From an implemenation of net.ty.pipeline.HandlerAdapater,
    yield a proxied ChannelInboundHandlerAdapter.
@@ -285,42 +298,73 @@
    protocols: `IsSharable`, `ChannelActive`, `ChannelInactive`,
    `ChannelReadComplete`, `ChannelRegistered`, `ChannelUnregistered`,
    `ExceptionCaught`, `ChannelWritabilityChanged`, and
-   `UserEventTriggered`."
+   `UserEventTriggered`.
+
+   To circumvent CLJ-1814 we cover the most common cases and otherwise
+   build a set of known operations to avoid calling `satisfies?` at runtime."
   [adapter]
   (when-not (satisfies? HandlerAdapter adapter)
     (throw (IllegalArgumentException.
             "adapters must implement HandlerAdapter")))
-  (proxy [ChannelInboundHandlerAdapter] []
-    (channelRead [^ChannelHandlerContext ctx input]
-      (channel-read adapter ctx input))
-    (isSharable []
-      (boolean
-       (or (not (satisfies? IsSharable adapter))
-           (is-sharable? adapter))))
-    (channelActive [^ChannelHandlerContext ctx]
-      (when (satisfies? ChannelActive adapter)
-        (channel-active adapter ctx)))
-    (channelInactive [^ChannelHandlerContext ctx]
-      (when (satisfies? ChannelInactive adapter)
-        (channel-inactive adapter ctx)))
-    (channelReadComplete [^ChannelHandlerContext ctx]
-      (when (satisfies? ChannelReadComplete adapter)
-        (channel-read-complete adapter ctx)))
-    (channelRegistered [^ChannelHandlerContext ctx]
-      (when (satisfies? ChannelRegistered adapter)
-        (channel-registered adapter ctx)))
-    (channelUnregistered [^ChannelHandlerContext ctx]
-      (when (satisfies? ChannelUnregistered adapter)
-        (channel-unregistered adapter ctx)))
-    (exceptionCaught [^ChannelHandlerContext ctx ^Throwable e]
-      (when (satisfies? ExceptionCaught adapter)
-        (exception-caught adapter ctx e)))
-    (channelWritabilityChanged [^ChannelHandlerContext ctx]
-      (when (satisfies? ChannelWritabilityChanged adapter)
-        (channel-writability-changed adapter ctx)))
-    (userEventTriggered [^ChannelHandlerContext ctx event]
-      (when (satisfies? UserEventTriggered adapter)
-        (user-event-triggered adapter ctx event)))))
+  (let [supported? (supported-signatures adapter)]
+    (cond
+      (= supported? #{})
+      (proxy [ChannelInboundHandlerAdapter] []
+        (channelRead [^ChannelHandlerContext ctx input]
+          (channel-read adapter ctx input))
+        (isSharable []
+          true))
+
+      (= supported? #{:exception-caught})
+      (proxy [ChannelInboundHandlerAdapter] []
+        (channelRead [^ChannelHandlerContext ctx input]
+          (channel-read adapter ctx input))
+        (exceptionCaught [^ChannelHandlerContext ctx ^Throwable e]
+          (exception-caught adapter ctx e))
+        (isSharable []
+          true))
+
+      (= supported? #{:exception-caught :is-sharable?})
+      (proxy [ChannelInboundHandlerAdapter] []
+        (channelRead [^ChannelHandlerContext ctx input]
+          (channel-read adapter ctx input))
+        (exceptionCaught [^ChannelHandlerContext ctx ^Throwable e]
+          (exception-caught adapter ctx e))
+        (isSharable []
+          (is-sharable? adapter)))
+
+      :else
+      (proxy [ChannelInboundHandlerAdapter] []
+        (channelRead [^ChannelHandlerContext ctx input]
+          (channel-read adapter ctx input))
+        (isSharable []
+          (boolean
+           (or (not (supported? :is-sharable?))
+               (is-sharable? adapter))))
+        (channelActive [^ChannelHandlerContext ctx]
+          (when (supported? :channel-active)
+            (channel-active adapter ctx)))
+        (channelInactive [^ChannelHandlerContext ctx]
+          (when (supported? :channel-inactive)
+            (channel-inactive adapter ctx)))
+        (channelReadComplete [^ChannelHandlerContext ctx]
+          (when (supported? :channel-read-complete)
+            (channel-read-complete adapter ctx)))
+        (channelRegistered [^ChannelHandlerContext ctx]
+          (when (supported? :channel-registered)
+            (channel-registered adapter ctx)))
+        (channelUnregistered [^ChannelHandlerContext ctx]
+          (when (supported? :channel-unregistered)
+            (channel-unregistered adapter ctx)))
+        (exceptionCaught [^ChannelHandlerContext ctx ^Throwable e]
+          (when (supported? :exception-caught)
+            (exception-caught adapter ctx e)))
+        (channelWritabilityChanged [^ChannelHandlerContext ctx]
+          (when (supported? :channel-writability-changed)
+            (channel-writability-changed adapter ctx)))
+        (userEventTriggered [^ChannelHandlerContext ctx event]
+          (when (supported? :user-event-triggered)
+            (user-event-triggered adapter ctx event)))))))
 
 (defn flush!
   "Flush context"
