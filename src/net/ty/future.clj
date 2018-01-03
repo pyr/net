@@ -60,11 +60,15 @@
   [^ChannelFuture future]
   (.sync future))
 
+(defn await!
+  [^ChannelFuture future]
+  (.await future))
 
 
 (def close-listener
   "Listener which closes a channel"
   io.netty.channel.ChannelFutureListener/CLOSE)
+
 (defn add-close-listener
   "Add close-listener to a channel"
   [^ChannelFuture chan]
