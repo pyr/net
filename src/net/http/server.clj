@@ -94,7 +94,7 @@
             (f/add-listener (if chunk this f/close-listener))))
       (a/close! body))))
 
-(defn write-response
+(defn write-raw-response
   "Write an HTTP response out to a Netty Context"
   [^ChannelHandlerContext ctx executor resp body]
   (f/with-result [ftr (.writeAndFlush ctx resp)]
@@ -121,31 +121,29 @@
   [{:keys [headers] :as req}]
   (some-> (:content-length headers) parse-num))
 
-(defn try-wait
-  [x]
-  (try
-    (cond
-      (instance? Channel x)
-      (debug "waiting on response channel")
-
-      (not (map? x))
-      (throw (IllegalArgumentException. "unhandled response type")))
-    (if (instance? Channel x)
-      (a/<!! x)
-      x)
-    (catch Exception e
-      (error e "was not able to get back response")
-      {:status 500 :body "argh"})))
+(defn write-response
+  [ctx executor version {:keys [body] :as resp}]
+  (when resp
+    (write-raw-response ctx executor
+                        (http/data->response resp version)
+                        body)))
 
 (defn get-response
   "When an aggregated request is done buffereing,
    Execute the handler on it and publish the response."
   [{:keys [request version]} handler ctx executor]
   (nc/with-executor executor
+    (let [retval   (handler request)
+          respond! (partial write-response ctx executor version)]
+      (cond
+        (instance? Channel resp)
+        (a/take! resp respond!)
 
-    (let [intermediate            (handler request)
-          {:keys [body] :as resp} (try-wait intermediate)]
-      (write-response ctx executor (http/data->response resp version) body))))
+        (map? resp)
+        (respond! resp)
+
+        ::else
+        (throw (IllegalArgumentExecption. "unhandled response type"))))))
 
 (defn backpressure-fn
   "Stop automatically reading from the body channel when we are signalled
