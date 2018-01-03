@@ -1,8 +1,9 @@
 (ns net.ty.bootstrap
   "A clojure facade to build netty bootstraps.
    In netty, bootstraps are helpers to get channels."
-  (:require [clojure.spec.alpha   :as s]
-            [net.ty.channel :as chan])
+  (:require [clojure.tools.logging :refer [debug info error]]
+            [clojure.spec.alpha    :as s]
+            [net.ty.channel        :as chan])
   (:import java.net.InetAddress
            java.net.NetworkInterface
            java.net.SocketAddress
@@ -17,9 +18,13 @@
            io.netty.channel.ChannelHandler
            io.netty.channel.EventLoopGroup
            io.netty.channel.nio.NioEventLoopGroup
+           io.netty.channel.epoll.EpollEventLoopGroup
            io.netty.channel.socket.nio.NioServerSocketChannel
            io.netty.channel.socket.nio.NioSocketChannel
            io.netty.channel.socket.nio.NioDatagramChannel
+           io.netty.channel.epoll.EpollSocketChannel
+           io.netty.channel.epoll.EpollServerSocketChannel
+           io.netty.channel.epoll.EpollDatagramChannel
            java.net.InetAddress))
 
 (def channel-options
@@ -58,10 +63,18 @@
 (def nio-socket-channel        NioSocketChannel)
 (def nio-datagram-channel      NioDatagramChannel)
 
+(def epoll-server-socket-channel EpollServerSocketChannel)
+(def epoll-socket-channel        EpollSocketChannel)
+(def epoll-datagram-channel      EpollDatagramChannel)
+
 (defn ^EventLoopGroup nio-event-loop-group
   "Yield a new NioEventLoopGroup"
   []
   (NioEventLoopGroup.))
+
+(defn ^EventLoopGroup epoll-event-loop-group
+  []
+  (EpollEventLoopGroup.))
 
 (defn ^ServerBootstrap server-bootstrap
   "Build a server bootstrap from a configuration map"
@@ -71,9 +84,9 @@
   (let [bs (ServerBootstrap.)
         group ^EventLoopGroup (:child-group config)]
     (if-let [c ^EventLoopGroup (:child-group config)]
-      (.group bs (or group (nio-event-loop-group)) c)
-      (.group bs (or group (nio-event-loop-group))))
-    (.channel bs (or (:channel config) nio-server-socket-channel))
+      (.group bs (or group (epoll-event-loop-group)) c)
+      (.group bs (or group (epoll-event-loop-group))))
+    (.channel bs (or (:channel config) epoll-server-socket-channel))
     (doseq [[k v] (:options config) :let [copt (->channel-option k)]]
       (.option bs copt (if (number? v) (int v) v)))
     (doseq [[k v] (:child-options config) :let [copt (->channel-option k)]]
@@ -108,8 +121,8 @@
     (println (s/explain-out (s/explain-data ::bootstrap-schema config)))
     (throw (IllegalArgumentException. "invalid bootstrap configuration")))
   (let [bs (Bootstrap.)]
-    (.group bs (or (:group config) (nio-event-loop-group)))
-    (.channel bs (or (:channel config) nio-socket-channel))
+    (.group bs (or (:group config) (epoll-event-loop-group)))
+    (.channel bs (or (:channel config) epoll-socket-channel))
     (doseq [[k v] (:options config) :let [copt (->channel-option k)]]
       (.option bs copt (if (number? v) (int v) v)))
     (doseq [[k v] (:attrs config)]
@@ -243,19 +256,3 @@
 (s/def ::bootstrap-schema
   (s/keys :req-un [::handler]
           :opt-un [::group ::options ::attrs ::channel ::remote-address]))
-
-(s/fdef ->channel-option
-        :args (s/cat :k keyword?)
-        :ret  (partial instance? ChannelOption))
-
-(s/fdef nio-event-loop-group
-        :args (s/cat)
-        :ret  (partial instance? NioEventLoopGroup))
-
-(s/fdef server-bootstrap
-        :args (s/cat :config ::server-bootstrap-schema)
-        :ret  ::server-bootstrap)
-
-(s/fdef bootstrap
-        :args (s/cat :config ::server-bootstrap-schema)
-        :ret  ::bootstrap)
