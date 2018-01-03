@@ -4,7 +4,15 @@
    Some bits shamelessly stolen from @mpenet's jet,
    See https://github.com/mpenet/jet for original"
   (:require [clojure.core.async :as async]
-            [clojure.spec.alpha       :as s]))
+            [clojure.spec.alpha :as s]))
+
+(defn backpressure-handling-fn
+  [status backpressure! close!]
+  (fn [result]
+    (cond
+      (not result)                               (when (fn? close!) (close!))
+      (compare-and-set! status ::sending ::sent) nil
+      (compare-and-set! status ::paused ::sent)  (backpressure! false))))
 
 (defn put!
   "Takes a `ch`, a `msg`, a single arg function that when passed
@@ -13,19 +21,10 @@
    source."
   ([ch msg backpressure! close!]
    (let [status (atom ::sending)]
-     (async/put! ch msg
-                 (fn [result]
-                   (if-not result
-                     (when close! (close!))
-                     (cond
-                       (compare-and-set! status ::sending ::sent)
-                       nil
-                       (compare-and-set! status ::paused  ::sent)
-                       (backpressure! false)))))
+     (async/put! ch msg (backpressure-handling-fn status backpressure! close!))
      ;; it's still sending, means it's parked, so suspend source
      (when (compare-and-set! status ::sending ::paused)
-       (backpressure! true))
-     nil))
+       (backpressure! true))))
   ([ch msg backpressure!]
    (put! ch msg backpressure! nil)))
 
