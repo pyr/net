@@ -1,6 +1,8 @@
 (ns net.http
   "Functions common to HTTP clients and servers"
-  (:require [clojure.spec.alpha :as s])
+  (:require [clojure.spec.alpha :as s]
+            [clojure.string     :as str]
+            [net.ty.buffer      :as buf])
   (:import io.netty.channel.ChannelHandlerContext
            io.netty.channel.ChannelHandlerAdapter
            io.netty.channel.ChannelInboundHandlerAdapter
@@ -51,10 +53,6 @@
   []
   (Epoll/isAvailable))
 
-(defn ^String bb->string  "Convert a ByteBuf to a UTF-8 String."
-  [^ByteBuf bb]
-  (.toString bb (Charset/forName "UTF-8")))
-
 (def method->data
   "Yield a keyword representing an HTTP method."
   {HttpMethod/CONNECT :connect
@@ -73,6 +71,10 @@
   {:debug LogLevel/DEBUG
    :info  LogLevel/INFO
    :warn  LogLevel/WARN})
+
+(defn http-content
+  [^ByteBuf buf]
+  (DefaultHttpContent. buf))
 
 (defn headers
   "Get a map out of netty headers."
@@ -112,6 +114,73 @@
 
 (def logging-re #"(?i)^(debug|info|warn)$")
 
+(defn int->status
+  "Get a Netty HttpResponseStatus from a int"
+  [status]
+  (HttpResponseStatus/valueOf (int status)))
+
+(defn data->response
+  "Create a valid HttpResponse from a response map."
+  [{:keys [status headers]} version]
+  (let [code (int->status status)
+        resp (DefaultHttpResponse. version code)
+        hmap (.headers resp)]
+    (doseq [[k v] headers]
+      (.set hmap (name k) v))
+    resp))
+
+(defn ->params
+  "Create a param map from a Netty QueryStringDecoder"
+  [^QueryStringDecoder dx]
+  (into
+   {}
+   (map (fn [[stringk vlist]]
+          (let [vs (seq vlist)
+                k  (keyword (str stringk))]
+            [k (if (= 1 (count vs)) (first vs) vs)])))
+   (.parameters dx)))
+
+(defn qs->body-params
+  "Extract body parameters from a body when application"
+  [{:keys [headers body]}]
+  (when-let [content-type (:content-type headers)]
+    (when (str/starts-with? content-type "application/x-www-form-urlencoded")
+      (->params
+       (QueryStringDecoder. (buf/to-string body) false)))))
+
+(defn assoc-body-params
+  "Add found query and body parameters (when applicable) to a request map"
+  [request]
+  (let [bp (qs->body-params request)]
+    (when-let [body (:body request)]
+      (buf/release body))
+    (cond-> request
+      bp (assoc :body-params bp)
+      bp (update :params merge bp))))
+
+(defn ->request
+  "Create a request map from a Netty Http Request"
+  [^HttpRequest msg]
+  (let [dx   (QueryStringDecoder. (str/replace (.uri msg) "+" "%20"))
+        hdrs (headers (.headers msg))
+        p1   (->params dx)]
+    {:uri            (.path dx)
+     :raw-uri        (.rawPath dx)
+     :get-params     p1
+     :params         p1
+     :request-method (method->data (.method msg))
+     :version        (-> msg .protocolVersion .text)
+     :headers        hdrs}))
+
+(def last-http-content
+  "Empty Last Http Content"
+  LastHttpContent/EMPTY_LAST_CONTENT)
+
+(defn last-http-content?
+  "Are we dealing with an instance of LastHttpContent"
+  [msg]
+  (instance? LastHttpContent msg))
+
 (s/def ::loop-thread-count pos-int?)
 (s/def ::disable-epoll boolean?)
 (s/def ::logging (s/or :string (s/and string? #(re-matches logging-re %))
@@ -122,10 +191,6 @@
 (s/def ::log-opts (s/keys :opt-un [::logging]))
 
 (s/fdef epoll? :args (s/cat) :ret boolean?)
-
-(s/fdef bb->string
-        :args (s/cat :bb #(instance? ByteBuf %))
-        :ret  string?)
 
 (s/fdef headers
         :args (s/cat :headers #(instance? HttpHeaders %))
