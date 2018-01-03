@@ -22,6 +22,7 @@ and nothing but standard clojure facilities.
 - HTTP(S) client
 - Simple interface to create TCP server with optional TLS support
 - Clojure [core.async](https://github.com/clojure/core.async) support
+- Memory-efficient transducers for collections of ByteBufs
 
 ## Documentation
 
