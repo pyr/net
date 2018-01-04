@@ -32,10 +32,15 @@ Net now has full [API Documentation](http://pyr.github.io/net) and
 ## Installation
 
 ```clojure
-    [[spootnik/net "0.3.3-beta15"]]
+    [[spootnik/net "0.3.3-beta16"]]
 ```
 
 ## Changelog
+
+### 0.3.3-beta16
+
+- Fix all reflection warnings
+- Fix calls to deprecated signatures in Netty
 
 ### 0.3.3-beta15
 

@@ -16,6 +16,7 @@
            io.netty.channel.ChannelOption
            io.netty.channel.ChannelHandler
            io.netty.channel.EventLoopGroup
+           io.netty.channel.WriteBufferWaterMark
            io.netty.channel.nio.NioEventLoopGroup
            io.netty.channel.epoll.EpollEventLoopGroup
            io.netty.channel.socket.nio.NioServerSocketChannel
@@ -37,7 +38,6 @@
    :ip-multicast-loop-disabled   ChannelOption/IP_MULTICAST_LOOP_DISABLED
    :ip-multicast-ttl             ChannelOption/IP_MULTICAST_TTL
    :ip-tos                       ChannelOption/IP_TOS
-   :max-messages-per-read        ChannelOption/MAX_MESSAGES_PER_READ
    :message-size-estimator       ChannelOption/MESSAGE_SIZE_ESTIMATOR
    :rcvbuf-allocator             ChannelOption/RCVBUF_ALLOCATOR
    :so-backlog                   ChannelOption/SO_BACKLOG
@@ -49,8 +49,7 @@
    :so-sndbuf                    ChannelOption/SO_SNDBUF
    :so-timeout                   ChannelOption/SO_TIMEOUT
    :tcp-nodelay                  ChannelOption/TCP_NODELAY
-   :write-buffer-high-water-mark ChannelOption/WRITE_BUFFER_HIGH_WATER_MARK
-   :write-buffer-low-water-mark  ChannelOption/WRITE_BUFFER_LOW_WATER_MARK
+   :write-buffer-high-water-mark ChannelOption/WRITE_BUFFER_WATER_MARK
    :write-spin-count             ChannelOption/WRITE_SPIN_COUNT})
 
 (defn ^ChannelOption ->channel-option
@@ -65,6 +64,10 @@
 (def epoll-server-socket-channel EpollServerSocketChannel)
 (def epoll-socket-channel        EpollSocketChannel)
 (def epoll-datagram-channel      EpollDatagramChannel)
+
+(defn write-buffer-water-mark
+  [low high]
+  (WriteBufferWaterMark. (int low) (int high)))
 
 (defn ^EventLoopGroup nio-event-loop-group
   "Yield a new NioEventLoopGroup"
@@ -171,10 +174,13 @@
 
 (defn shutdown-fn
   "Closure to shutdown a channel and associated group"
-  [chan group]
+  [chan config]
   (fn []
     (chan/close! chan)
-    (shutdown-gracefully! group)))
+    (when-let [group (:child-group config)]
+      (shutdown-gracefully! group))
+    (when-let [group (:group config)]
+      (shutdown-gracefully! group))))
 
 (defn set-child-handler!
   "A server bootstrap has a child handler, this methods helps set it"
@@ -194,7 +200,6 @@
 (s/def ::ip-multicast-loop-disabled boolean?)
 (s/def ::ip-multicast-ttl pos-int?)
 (s/def ::ip-tos pos-int?)
-(s/def ::max-messages-per-read pos-int?)
 (s/def ::message-size-estimator (partial instance? MessageSizeEstimator))
 (s/def ::rcvbuf-allocator (partial instance? RecvByteBufAllocator))
 (s/def ::so-backlog pos-int?)
@@ -206,35 +211,11 @@
 (s/def ::so-sndbuf pos-int?)
 (s/def ::so-timeout pos-int?)
 (s/def ::tcp-nodelay boolean?)
-(s/def ::write-buffer-high-water-mark pos-int?)
-(s/def ::write-buffer-low-water-mark pos-int?)
+(s/def ::write-buffer-water-mark (partial instance? WriteBufferWaterMark))
 (s/def ::write-spin-count pos-int?)
 
-(s/def ::channel-option-schema
-  (s/keys :opt-un [::allocator
-                   ::allow-half-closure
-                   ::auto-read
-                   ::connect-timeout-millis
-                   ::ip-multicast-addr
-                   ::ip-multicast-if
-                   ::ip-multicast-loop-disabled
-                   ::ip-multicast-ttl
-                   ::ip-tos
-                   ::max-messages-per-read
-                   ::message-size-estimator
-                   ::rcvbuf-allocator
-                   ::so-backlog
-                   ::so-broadcast
-                   ::so-keepalive
-                   ::so-linger
-                   ::so-rcvbuf
-                   ::so-reuseaddr
-                   ::so-sndbuf
-                   ::so-timeout
-                   ::tcp-nodelay
-                   ::write-buffer-high-water-mark
-                   ::write-buffer-low-water-mark
-                   ::write-spin-count]))
+;; We do not specify optional keys since they will be validated anyway
+(s/def ::channel-option-schema map?)
 
 (s/def ::group (partial instance? EventLoopGroup))
 (s/def ::handler any?)

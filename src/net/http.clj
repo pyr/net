@@ -186,9 +186,8 @@
 (s/def ::logging (s/or :string (s/and string? #(re-matches logging-re %))
                        :keyword #{:debug :info :warn}))
 
-(s/def ::boss-group-opts (s/keys :opt-un [::loop-thread-count ::disable-epoll]))
-
-(s/def ::log-opts (s/keys :opt-un [::logging]))
+(s/def ::boss-group-opts map?)
+(s/def ::log-opts map?)
 
 (s/fdef epoll? :args (s/cat) :ret boolean?)
 

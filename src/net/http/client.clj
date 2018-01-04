@@ -333,9 +333,7 @@
                   :opt-un [::request-method ::body ::version ::query ::auth]))
 
 ;;
-(s/def ::build-client-opts
-  (s/keys :opt-un [::ssl ::http/loop-thread-count
-                   ::http/disable-epoll]))
+(s/def ::build-client-opts map?)
 
 (s/def ::client
   (s/keys :req-un [::channel ::group ::ssl-ctx]))

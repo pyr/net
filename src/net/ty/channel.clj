@@ -113,10 +113,7 @@
     (.close ch))
 
   (disconnect! [ch]
-    (.disconnect ch))
-
-  (deregister! [ch]
-    (.deregister ch)))
+    (.disconnect ch)))
 
 (defn channel-group
   "Create a named channel group"

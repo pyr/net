@@ -390,9 +390,5 @@
        (do ~@body))
      (channelReadComplete [^ChannelHandlerContext ~ctx]
        (.flush ^ChannelHandlerContext ~ctx))
-     (exceptionCaught [^ChannelHandlerContext ~ctx ^Exception e#]
-       (proxy-super exceptionCaught
-                    ^ChannelHandlerContext ~ctx
-                    ^Exception e#))
      (isSharable []
        true)))

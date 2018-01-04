@@ -327,13 +327,4 @@
 (s/def ::aggregate-length pos-int?)
 (s/def ::executor executor?)
 
-(s/def ::options (s/keys :opt-un [::loop-thread-count
-                                  ::disable-epoll
-                                  ::host
-                                  ::post
-                                  ::chunk-size
-                                  ::inbuf
-                                  ::so-backlog
-                                  ::aggregate-length
-                                  ::executor
-                                  ::ring-handler]))
+(s/def ::options map?)
