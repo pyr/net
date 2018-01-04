@@ -1,7 +1,6 @@
 (ns net.ty.buffer-test
   (:require [clojure.test :refer :all]
             [net.ty.buffer :refer :all]
-            [clojure.tools.logging :refer [debug]]
             [clojure.core.async :as a]))
 
 (def one? (partial = 1))

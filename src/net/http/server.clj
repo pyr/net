@@ -21,8 +21,7 @@
             [clojure.core.async    :as a]
             [clojure.spec.alpha    :as s]
             [clojure.string        :as str]
-            [net.core.async        :refer [put!]]
-            [clojure.tools.logging :refer [debug info warn error]])
+            [net.core.async        :refer [put!]])
   (:import io.netty.channel.ChannelHandlerContext
            io.netty.channel.ChannelHandlerAdapter
            io.netty.channel.ChannelInboundHandlerAdapter
@@ -187,7 +186,6 @@
          state      (volatile! {})]
      (proxy [ChannelInboundHandlerAdapter] []
        (exceptionCaught [^ChannelHandlerContext ctx e]
-         (error e "netty exception caught!")
          (handler {:type           :error
                    :request-method :error
                    :error          e
@@ -209,9 +207,7 @@
                         executor (http/last-http-content? msg))
 
            :else
-           (do
-             (error "unhandled message chunk on body channel")
-             (throw (IllegalArgumentException. "unhandled message chunk on body channel")))))))))
+           (throw (IllegalArgumentException. "unhandled message chunk on body channel"))))))))
 
 (defn initializer
   "An initializer is a per-connection context creator.

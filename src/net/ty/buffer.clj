@@ -2,8 +2,7 @@
  "Utility functions to build fixed size buffers.
    These functions hold onto data and yield when
    a specific size has been reached."
- (:require [net.ty.coerce         :as co]
-           [clojure.tools.logging :refer [debug]])
+ (:require [net.ty.coerce         :as co])
   (:import io.netty.buffer.Unpooled
            io.netty.buffer.CompositeByteBuf
            io.netty.buffer.ByteBuf

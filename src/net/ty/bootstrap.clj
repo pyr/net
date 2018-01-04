@@ -1,8 +1,7 @@
 (ns net.ty.bootstrap
   "A clojure facade to build netty bootstraps.
    In netty, bootstraps are helpers to get channels."
-  (:require [clojure.tools.logging :refer [debug info error]]
-            [clojure.spec.alpha    :as s]
+  (:require [clojure.spec.alpha    :as s]
             [net.ty.channel        :as chan])
   (:import java.net.InetAddress
            java.net.NetworkInterface

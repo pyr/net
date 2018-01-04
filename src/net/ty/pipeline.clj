@@ -278,17 +278,17 @@
    (StringEncoder. (charset->charset-util charset))))
 
 (defn supported-signatures
-  [adapter]
+  [ap]
   (cond-> #{}
-    (satisfies? IsSharable)                (conj :is-sharable?)
-    (satisfies? ChannelActive)             (conj :channel-active)
-    (satisfies? ChannelInactive)           (conj :channel-inactive)
-    (satisfies? ChannelReadComplete)       (conj :channel-read-complete)
-    (satisfies? ChannelRegistered)         (conj :channel-registered)
-    (satisfies? ChannelUnregistered)       (conj :channel-unregistered)
-    (satisfies? ChannelWritabilityChanged) (conj :channel-writability-changed)
-    (satisfies? UserEventTriggered)        (conj :user-event-triggered)
-    (satisfies? ExceptionCaught)           (conj :exception-caught)))
+    (satisfies? IsSharable ap)                (conj :is-sharable?)
+    (satisfies? ChannelActive ap)             (conj :channel-active)
+    (satisfies? ChannelInactive ap)           (conj :channel-inactive)
+    (satisfies? ChannelReadComplete ap)       (conj :channel-read-complete)
+    (satisfies? ChannelRegistered ap)         (conj :channel-registered)
+    (satisfies? ChannelUnregistered ap)       (conj :channel-unregistered)
+    (satisfies? ChannelWritabilityChanged ap) (conj :chanl-writability-changed)
+    (satisfies? UserEventTriggered ap)        (conj :user-event-triggered)
+    (satisfies? ExceptionCaught ap)           (conj :exception-caught)))
 
 (defn make-handler-adapter
   "From an implemenation of net.ty.pipeline.HandlerAdapater,
@@ -360,7 +360,7 @@
           (when (supported? :exception-caught)
             (exception-caught adapter ctx e)))
         (channelWritabilityChanged [^ChannelHandlerContext ctx]
-          (when (supported? :channel-writability-changed)
+          (when (supported? :chan-writability-changed)
             (channel-writability-changed adapter ctx)))
         (userEventTriggered [^ChannelHandlerContext ctx event]
           (when (supported? :user-event-triggered)

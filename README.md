@@ -1,4 +1,4 @@
-net: the clojure netty companion
+net: A clojure netty companion
 ================================
 
 [![Build Status](https://secure.travis-ci.org/pyr/net.png)](http://travis-ci.org/pyr/net)
@@ -32,10 +32,15 @@ Net now has full [API Documentation](http://pyr.github.io/net) and
 ## Installation
 
 ```clojure
-    [[spootnik/net "0.3.3-beta14"]]
+    [[spootnik/net "0.3.3-beta15"]]
 ```
 
 ## Changelog
+
+### 0.3.3-beta15
+
+- No more dependency on `tools.logging`
+- Better dispatch for pipelines
 
 ### 0.3.3-beta14
 
