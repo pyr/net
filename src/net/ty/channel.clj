@@ -4,6 +4,7 @@
   (:import io.netty.channel.ChannelFuture
            io.netty.channel.ChannelFutureListener
            io.netty.channel.Channel
+           io.netty.channel.ChannelConfig
            io.netty.channel.ChannelHandlerContext
            io.netty.channel.DefaultChannelPromise
            io.netty.channel.group.ChannelGroup
@@ -190,3 +191,11 @@
   [^Channel chan k]
   (let [attr (get-attr chan k)]
     (.set attr nil)))
+
+(defn config
+  [^Channel chan]
+  (.config chan))
+
+(defn set-autoread!
+  [^ChannelConfig cfg autoread?]
+  (.setAutoRead cfg (boolean autoread?)))
