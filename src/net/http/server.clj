@@ -154,14 +154,14 @@
 
 (defn close-fn
   "A closure over a context that will close it when called."
-  [ctx]
+  [msg ctx]
   (fn []
+    (buf/release msg)
     (-> ctx chan/channel chan/close-future)))
 
 (defn write-chunk
   [{:keys [request] :as state} handler ctx msg executor close?]
-  (comment (a/put! (:body request) msg))
-  (put! (:body request) msg (backpressure-fn ctx) (close-fn ctx))
+  (put! (:body request) msg (backpressure-fn ctx) (close-fn msg ctx))
   (when close?
     (a/close! (:body request))))
 
