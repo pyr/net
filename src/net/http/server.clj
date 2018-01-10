@@ -148,9 +148,9 @@
   "Stop automatically reading from the body channel when we are signalled
    for backpressure."
   [ctx]
-  (let [cfg (-> ctx chan/channel .config)]
+  (let [cfg (-> ctx chan/channel chan/config)]
     (fn [enable?]
-      (.setAutoRead cfg (not enable?)))))
+      (chan/set-autoread! cfg (not enable?)))))
 
 (defn close-fn
   "A closure over a context that will close it when called."
@@ -167,11 +167,8 @@
 
 (defn send-100-continue-fn
   [^ChannelHandlerContext ctx ^HttpRequest msg]
-  (let [version (.protocolVersion msg)]
-    (fn []
-      (.writeAndFlush ctx
-                      (DefaultFullHttpResponse. version
-                                                HttpResponseStatus/CONTINUE)))))
+  (let [version (http/protocol-version msg)]
+    #(chan/write-and-flush! ctx (http/continue-response version))))
 
 (defn ^ChannelHandler netty-handler
   "This is a stateful, per HTTP session adapter which wraps the user
@@ -195,7 +192,7 @@
            (instance? HttpRequest msg)
            (do
              (vswap! state assoc
-                     :version (.protocolVersion ^HttpRequest msg)
+                     :version (http/protocol-version msg)
                      :request (assoc (http/->request msg)
                                      :body (a/chan inbuf)
                                      :is-100-continue-expected? (HttpUtil/is100ContinueExpected msg)
