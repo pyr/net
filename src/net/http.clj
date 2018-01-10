@@ -30,6 +30,7 @@
            io.netty.handler.codec.http.DefaultHttpResponse
            io.netty.handler.codec.http.DefaultHttpContent
            io.netty.handler.codec.http.DefaultLastHttpContent
+           io.netty.handler.codec.http.DefaultFullHttpResponse
            io.netty.handler.codec.http.HttpRequest
            io.netty.handler.codec.http.HttpContent
            io.netty.handler.codec.http.LastHttpContent
@@ -171,6 +172,14 @@
      :request-method (method->data (.method msg))
      :version        (-> msg .protocolVersion .text)
      :headers        hdrs}))
+
+(defn protocol-version
+  [^HttpRequest msg]
+  (.protocolVersion msg))
+
+(defn continue-response
+  [^HttpVersion version]
+  (DefaultFullHttpResponse. version HttpResponseStatus/CONTINUE))
 
 (def last-http-content
   "Empty Last Http Content"
