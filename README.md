@@ -32,10 +32,15 @@ Net now has full [API Documentation](http://pyr.github.io/net) and
 ## Installation
 
 ```clojure
-    [[spootnik/net "0.3.3-beta16"]]
+    [[spootnik/net "0.3.3-beta17"]]
 ```
 
 ## Changelog
+
+### 0.3.3-beta17
+
+- Fix a memory leak when closing the body channel from a handler
+- Add clojure tools.deps.alpha support
 
 ### 0.3.3-beta16
 
