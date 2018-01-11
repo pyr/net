@@ -36,7 +36,6 @@
            io.netty.handler.codec.http.HttpObjectAggregator
            io.netty.handler.codec.http.FullHttpResponse
            io.netty.handler.codec.http.DefaultFullHttpRequest
-           io.netty.handler.codec.http.QueryStringEncoder
            io.netty.handler.ssl.SslContext
            io.netty.handler.ssl.SslHandler
            java.net.URI
@@ -185,26 +184,13 @@
       (when-not (.get headers "Content-Length")
         (.set headers "Content-Length" (str (count body)))))))
 
-(defn ^URI data->uri
-  "Produce a valid URI from arguments found in a request map"
-  [^URI uri query]
-  (if (seq query)
-    (let [qse (QueryStringEncoder. (str uri))]
-      (doseq [[k v] query]
-        (if (sequential? v)
-          (doseq [subv v]
-            (.addParam qse (name k) (str subv)))
-          (.addParam qse (name k) (str v))))
-      (.toUri qse))
-    uri))
-
 (defn data->request
   "Produce a valid request from a "
   [{:keys [body headers request-method version query uri auth]}]
-  (let [uri     (data->uri uri query)
+  (let [path    (uri/encoded-path uri query)
         version (data->version version)
         method  (data->method request-method)
-        path    (str (.getRawPath uri) "?" (.getRawQuery uri))
+        path    (str (uri/raw-path uri) "?" (uri/raw-query uri))
         request (DefaultFullHttpRequest. version method path)]
     (data->headers (.headers request) headers (.getHost uri))
     (when auth
@@ -235,11 +221,11 @@
    (when-not (:uri request-map)
      (throw (ex-info "malformed request-map, needs :uri key" {})))
    (let [uri    (URI. (:uri request-map))
-         scheme (if-let [scheme (.getScheme uri)] (.toLowerCase scheme) "http")
-         host   (.getHost uri)
-         port   (cond (not= -1 (.getPort uri)) (.getPort uri)
-                      (= "http" scheme) 80
-                      (= "https" scheme) 443)
+         scheme (uri/scheme uri "http")
+         host   (uri/host uri)
+         port   (cond (some? (uri/port uri)) (uri/port uri)
+                      (= "http" scheme)      80
+                      (= "https" scheme)     443)
          ssl?   (= "https" scheme)
          bs     (doto (Bootstrap.)
                   (.group   group)
