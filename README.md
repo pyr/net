@@ -1,21 +1,21 @@
-net: A clojure netty companion
+net: A clojure Netty companion
 ================================
 
 [![Build Status](https://secure.travis-ci.org/pyr/net.png)](http://travis-ci.org/pyr/net)
 
 Net provides a clojure foundation to implement asynchronous networking
-based on netty.
+based on Netty.
 
 It is much narrower in scope and features than
 [aleph](https://github.com/ztellman/aleph), which you might want to
 look into if you want a full-fledged asynchronous programming toolkit
 for clojure.
 
-**net** is rather geared towards people with prior netty knowledge
+**net** is rather geared towards people with prior Netty knowledge
 wanting to keep the same workflow in, *hopefully*, idiomatic Clojure,
 and nothing but standard clojure facilities.
 
-- Light facades around netty concepts such as channels, pipelines,
+- Light facades around Netty concepts such as channels, pipelines,
   channel initializers and bootstraps
 - Facilities to create TLS client and server contexts from PEM files
 - Ring-like HTTP(S) server facade
@@ -32,10 +32,14 @@ Net now has full [API Documentation](http://pyr.github.io/net) and
 ## Installation
 
 ```clojure
-    [[spootnik/net "0.3.3-beta17"]]
+    [[spootnik/net "0.3.3-beta18"]]
 ```
 
 ## Changelog
+
+### 0.3.3-beta18
+
+- Improve behavior on early downstream channel closing
 
 ### 0.3.3-beta17
 
@@ -54,16 +58,16 @@ Net now has full [API Documentation](http://pyr.github.io/net) and
 
 ### 0.3.3-beta14
 
-- Depend on netty 4.1.19.Final
+- Depend on Netty 4.1.19.Final
 - Add ByteBuf collection transducers
 - Handle Http server callback on an executor
-- Improve netty facade
+- Improve Netty facade
 - Add ByteBuf manipulation tooling
 - Circumvent CLJ-1814 as much as possible
 
 ### 0.3.3-beta9
 
-- Depend on netty 4.1.8.Final
+- Depend on Netty 4.1.8.Final
 
 ### 0.3.3-beta8
 
