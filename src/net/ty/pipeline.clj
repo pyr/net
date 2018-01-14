@@ -390,7 +390,7 @@
      (channelRead [^ChannelHandlerContext ~ctx ~input]
        (do ~@body))
      (channelReadComplete [^ChannelHandlerContext ~ctx]
-       (.flush ^ChannelHandlerContext ~ctx))
+       (flush! ~ctx))
      (isSharable []
        true)))
 
