@@ -96,7 +96,7 @@
 (defn write-raw-response
   "Write an HTTP response out to a Netty Context"
   [^ChannelHandlerContext ctx executor resp body]
-  (f/with-result [ftr (.writeAndFlush ctx resp)]
+  (f/with-result [ftr (chan/write-and-flush! ctx resp)]
     (cond
       (chunk/content-chunk? body)
       (f/with-result [ftr (chan/write-and-flush! ctx (chunk/chunk->http-object body))]
@@ -144,27 +144,6 @@
         :else
         (throw (IllegalArgumentException. "unhandled response type"))))))
 
-(defn backpressure-fn
-  "Stop automatically reading from the body channel when we are signalled
-   for backpressure."
-  [ctx]
-  (let [cfg (-> ctx chan/channel chan/config)]
-    (fn [enable?]
-      (chan/set-autoread! cfg (not enable?)))))
-
-(defn close-fn
-  "A closure over a context that will close it when called."
-  [msg ctx]
-  (fn []
-    (buf/release msg)
-    (-> ctx chan/channel chan/close-future)))
-
-(defn write-chunk
-  [{:keys [request] :as state} handler ctx msg executor close?]
-  (put! (:body request) msg (backpressure-fn ctx) (close-fn msg ctx))
-  (when close?
-    (a/close! (:body request))))
-
 (defn send-100-continue-fn
   [^ChannelHandlerContext ctx ^HttpRequest msg]
   (let [version (http/protocol-version msg)]
@@ -200,8 +179,7 @@
              (get-response @state handler ctx executor))
 
            (chunk/content-chunk? msg)
-           (write-chunk @state handler ctx (-> msg buf/as-buffer)
-                        executor (http/last-http-content? msg))
+           (chunk/enqueue (:body @state) ctx msg)
 
            :else
            (throw (IllegalArgumentException. "unhandled message chunk on body channel"))))))))

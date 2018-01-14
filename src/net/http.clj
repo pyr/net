@@ -2,7 +2,8 @@
   "Functions common to HTTP clients and servers"
   (:require [clojure.spec.alpha :as s]
             [clojure.string     :as str]
-            [net.ty.buffer      :as buf])
+            [net.ty.buffer      :as buf]
+            [net.http.headers   :as headers])
   (:import io.netty.channel.ChannelHandlerContext
            io.netty.channel.ChannelHandlerAdapter
            io.netty.channel.ChannelInboundHandlerAdapter
@@ -76,14 +77,6 @@
 (defn http-content
   [^ByteBuf buf]
   (DefaultHttpContent. buf))
-
-(defn headers
-  "Get a map out of netty headers."
-  [^HttpHeaders headers]
-  (into
-   {}
-   (map (fn [[^String k ^String v]] [(-> k .toLowerCase keyword) v]))
-   (.entries headers)))
 
 (defn make-boss-group
   "Create an event loop group. Try setting up an epoll event loop group
@@ -163,7 +156,7 @@
   "Create a request map from a Netty Http Request"
   [^HttpRequest msg]
   (let [dx   (QueryStringDecoder. (str/replace (.uri msg) "+" "%20"))
-        hdrs (headers (.headers msg))
+        hdrs (headers/as-map (.headers msg))
         p1   (->params dx)]
     {:uri            (.path dx)
      :raw-uri        (.rawPath dx)
@@ -197,27 +190,3 @@
 
 (s/def ::boss-group-opts map?)
 (s/def ::log-opts map?)
-
-(s/fdef epoll? :args (s/cat) :ret boolean?)
-
-(s/fdef headers
-        :args (s/cat :headers #(instance? HttpHeaders %))
-        :ret  (s/map-of keyword? string?))
-
-(s/fdef make-boss-group
-        :args (s/cat :opts ::boss-group-opts)
-        :ret #(instance? EventLoopGroup %))
-
-(s/fdef set-log-handler!
-        :args (s/cat :bootstrap #(instance? AbstractBootstrap %)
-                     :log-opts ::log-opts)
-        :ret #(instance? AbstractBootstrap %))
-
-(s/fdef set-optimal-server-channel!
-        :args (s/cat :bootstrap #(instance? AbstractBootstrap %)
-                     :disable-epoll? boolean?)
-        :ret #(instance? AbstractBootstrap %))
-
-(s/fdef optimal-client-channel
-        :args (s/cat :disable-epoll? boolean?)
-        :ret  #(instance? SocketChannel %))

@@ -139,6 +139,10 @@
   [^ChannelFuture chan]
   (.syncUninterruptibly chan))
 
+(defn sync!
+  [^ChannelFuture chan]
+  (.sync chan))
+
 (defn ^ChannelFuture close-future
   "Get the close future for a channel"
   [^Channel chan]
@@ -199,3 +203,15 @@
 (defn set-autoread!
   [^ChannelConfig cfg autoread?]
   (.setAutoRead cfg (boolean autoread?)))
+
+(defn alloc!
+  [^Channel chan]
+  (.alloc chan))
+
+(defn pipeline
+  [^Channel chan]
+  (.pipeline chan))
+
+(defn channel?
+  [x]
+  (instance? Channel x))

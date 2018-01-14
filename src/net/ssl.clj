@@ -1,6 +1,7 @@
 (ns net.ssl
   "Clojure glue code to interact with the horrible JVM SSL code"
-  (:require [net.ty.pipeline :refer [*channel*]]
+  (:require [net.ty.channel  :as chan]
+            [net.ty.pipeline :refer [*channel*]]
             [clojure.java.io :refer [input-stream]])
   (:import java.security.KeyStore
            java.security.KeyFactory
@@ -138,13 +139,18 @@
                                (throw (ex-info "invalid client auth mode" {})))))
       (.build ^SslContextBuilder builder))))
 
+(defn ^ChannelHandler new-handler
+  "Create a new SSL handler from an SslContext"
+  [^SslContext ctx ^Channel channel]
+  (.newHandler ctx (.alloc channel)))
+
 (defn ^clojure.lang.IFn handler-fn
   "Build a handler function to be used in netty pipelines out of an SSL context.
    Will yield a 1-arity function of a context and a 3-arity function of a
    context, a host, and a port which will add a handler to the context."
   ([^SslContext ctx host port]
    (fn ^ChannelHandler make-handler []
-     (.newHandler ctx (.alloc ^Channel *channel*) host port)))
+     (new-handler ctx *channel* host port)))
   ([^SslContext ctx]
    (fn ^ChannelHandler make-handler []
-     (.newHandler ctx (.alloc ^Channel *channel*)))))
+     (new-handler ctx *channel*))))

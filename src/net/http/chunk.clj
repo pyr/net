@@ -1,4 +1,9 @@
 (ns net.http.chunk
+  (:require [net.ty.buffer      :as buf]
+            [net.ty.channel     :as chan]
+            [net.http           :as http]
+            [clojure.core.async :as a]
+            [net.core.async     :refer [put!]])
   (:import io.netty.buffer.Unpooled
            io.netty.buffer.ByteBuf
            io.netty.handler.codec.http.DefaultHttpContent
@@ -7,7 +12,8 @@
            java.io.File
            java.io.FileInputStream
            java.nio.charset.Charset
-           java.nio.ByteBuffer))
+           java.nio.ByteBuffer
+           clojure.core.async.impl.protocols.Channel))
 
 (defn input-stream-chunk
   "Fill up a ByteBuf with the contents of an input stream"
@@ -67,3 +73,33 @@
       (instance? InputStream x)
       (instance? File x)
       (satisfies? ChunkEncoder x)))
+
+(defn backpressure-fn
+  "Stop automatically reading from the body channel when we are signalled
+   for backpressure."
+  [ctx]
+  (let [cfg (-> ctx chan/channel chan/config)]
+    (fn [enable?]
+      (chan/set-autoread! cfg (not enable?)))))
+
+(defn close-fn
+  "A closure over a context that will close it when called."
+  [msg ctx]
+  (fn []
+    (buf/release msg)
+    (-> ctx chan/channel chan/close-future)))
+
+(defn enqueue
+  [sink ctx msg]
+  (put! sink (buf/as-buffer msg) (backpressure-fn ctx) (close-fn msg ctx))
+  (when (http/last-http-content? msg)
+    (a/close! sink)))
+
+(defn prepare-body
+  [x]
+  (cond
+    (nil? x)              http/last-http-content
+    (content-chunk? x)    (chunk->http-object x)
+    (instance? Channel x) x
+    :else                 (throw (IllegalArgumentException.
+                                  "Cannot coerce body to HttpContent"))))
