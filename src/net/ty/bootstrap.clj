@@ -146,8 +146,19 @@
    (.connect bs))
   ([^Bootstrap bs ^SocketAddress sa]
    (.connect bs sa))
-  ([^Bootstrap bs ^InetAddress x y]
-   (.connect bs x (int y))))
+  ([^Bootstrap bs x y]
+   (cond
+     (string? x)
+     (.connect bs ^String x (int y))
+
+     (instance? InetAddress x)
+     (.connect bs ^InetAddress x (int y))
+
+     (instance? SocketAddress x)
+     (.connect bs ^SocketAddress x ^SocketAddress y)
+
+     :else
+     (throw (IllegalArgumentException. "Invalid arguments to connect")))))
 
 (defn local-address!
   "Sets the bootstrap's local address. Accepts either a SocketAddress or

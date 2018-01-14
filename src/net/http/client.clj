@@ -73,9 +73,9 @@
     (proxy [ChannelInboundHandlerAdapter] []
       (exceptionCaught [^ChannelHandlerContext ctx e]
         (f {:status 5555 :error e}))
-      (channelRead [^ChannelHandlerContext ctx ^FullHttpResponse msg]
-        (if (instance? msg HttpResponse)
-          (response-handler f ctx msg)
+      (channelRead [^ChannelHandlerContext ctx ^HttpResponse msg]
+        (if (instance? HttpResponse msg)
+          (response-handler f ctx msg body)
           (chunk/enqueue body ctx msg))))))
 
 (defn request-initializer
@@ -107,8 +107,8 @@
     (a/take!
      body
      #(let [msg (if % (chunk/chunk->http-object %) http/last-http-content)]
-        (-> (chan/write-and-flush! ctx msg)
-            (f/add-listener (if % this f/close-listener)))))
+        (cond-> (chan/write-and-flush! ctx msg)
+          (some?) (f/add-listener this))))
     (a/close! body)))
 
 (defn async-request
@@ -132,11 +132,11 @@
          chan        (some-> bs (bs/connect! host port) chan/sync! chan/channel)
          body        (chunk/prepare-body (:body request-map))
          req         (req/data->request uri request-map)]
+     (prn {:req req})
      (f/with-result [ftr (chan/write-and-flush! chan req)]
        (if (instance? Channel body)
          (f/operation-complete (write-listener chan body))
-         (f/with-result [ftr (chan/write-and-flush! chan body)]
-           (chan/close! (chan/channel ftr))))))))
+         (chan/write-and-flush! chan body))))))
 
 (defn request
   "Execute a request against an asynchronous client. If no client exists, create one.
@@ -155,7 +155,8 @@
    (try
      (async-request request-map #(a/put! ch (or % ::no-output)))
      (catch Throwable t
-       (a/put! ch t))))
+       (a/put! ch t)))
+   ch)
   ([client request-map]
    (request-chan client request-map (a/promise-chan)))
   ([request-map]
