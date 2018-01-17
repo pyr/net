@@ -198,7 +198,7 @@
             codec        (HttpServerCodec. 4096 8192 (int chunk-size))
             handler      (netty-handler ring-handler handler-opts)
             pipeline     (.pipeline ^io.netty.channel.Channel channel)]
-        (.addLast pipeline "codec"       codec)
+        (.addLast pipeline "codec"      codec)
         (.addLast pipeline "handler"    handler)))))
 
 (defn set-so-backlog!

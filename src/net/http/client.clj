@@ -65,29 +65,42 @@
       ;; This actually releases the content
       (buf/release (buf/as-buffer msg)))))
 
+(defn body-chan
+  [inbuf {:keys [reducer xf init]}]
+  (cond
+    (some? reducer)
+    (let [ch (a/chan inbuf)]
+      [ch (a/transduce xf reducer (or init (reducer)) ch)])
+
+    (some? xf)
+    (let [ch (a/chan inbuf xf)] [ch ch])
+
+    :else
+    (let [ch (a/chan inbuf)] [ch ch])))
+
 (defn ^ChannelInboundHandlerAdapter netty-handler
   "Simple netty-handler, everything may happen in
    channel read, since we're expecting a full http request."
-  [f]
-  (let [body (a/chan default-inbuf)]
+  [f transform]
+  (let [[in out] (body-chan default-inbuf transform)]
     (proxy [ChannelInboundHandlerAdapter] []
       (exceptionCaught [^ChannelHandlerContext ctx e]
         (f {:status 5555 :error e}))
       (channelRead [^ChannelHandlerContext ctx ^HttpResponse msg]
         (if (instance? HttpResponse msg)
-          (response-handler f ctx msg body)
-          (chunk/enqueue body ctx msg))))))
+          (response-handler f ctx msg out)
+          (chunk/enqueue in ctx msg))))))
 
 (defn request-initializer
   "Our channel initializer."
-  ([ssl-ctx handler]
+  ([ssl-ctx handler transform]
    (proxy [ChannelInitializer] []
      (initChannel [^Channel channel]
        (-> (chan/pipeline channel)
            (cond-> (some? ssl-ctx)
              (p/add-last "ssl"   (ssl/new-handler ssl-ctx channel)))
            (p/add-last "codec"   (HttpClientCodec.))
-           (p/add-last "handler" (netty-handler handler)))))))
+           (p/add-last "handler" (netty-handler handler transform)))))))
 
 (defn build-client
   "Create an http client instance. In most cases you will need only
@@ -125,14 +138,14 @@
          ssl?        (:ssl? uri)
          port        (:port uri)
          host        (:host uri)
-         initializer (request-initializer (when ssl? ssl-ctx) handler)
+         transform   (:transform request-map)
+         initializer (request-initializer (when ssl? ssl-ctx) handler transform)
          bs          (bs/bootstrap {:group   group
                                     :channel channel
                                     :handler initializer})
          chan        (some-> bs (bs/connect! host port) chan/sync! chan/channel)
          body        (chunk/prepare-body (:body request-map))
          req         (req/data->request uri request-map)]
-     (prn {:req req})
      (f/with-result [ftr (chan/write-and-flush! chan req)]
        (if (instance? Channel body)
          (f/operation-complete (write-listener chan body))
