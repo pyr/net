@@ -177,10 +177,9 @@
    nature of handler adapters."
   ([handler]
    (netty-handler handler {}))
-  ([handler {:keys [inbuf aggregate-length executor]}]
-   (let [inbuf      (or inbuf default-inbuf)
-         agg-length (or aggregate-length default-aggregated-length)
-         state      (volatile! {})]
+  ([handler {:keys [inbuf executor]}]
+   (let [inbuf (or inbuf default-inbuf)
+         state (volatile! {})]
      (proxy [ChannelInboundHandlerAdapter] []
        (exceptionCaught [^ChannelHandlerContext ctx e]
          (handler {:type           :error
@@ -216,8 +215,8 @@
     :as   opts}]
   (proxy [ChannelInitializer] []
     (initChannel [channel]
-      (let [handler-opts (select-keys opts [:inbuf :aggregate-length :executor])
-            codec        (HttpServerCodec. 4096 8192 (int chunk-size))
+      (let [handler-opts (select-keys opts [:inbuf :executor])
+            codec        (HttpServerCodec. 4096 8192 (int chunk-size) true)
             handler      (netty-handler ring-handler handler-opts)
             pipeline     (.pipeline ^io.netty.channel.Channel channel)]
         (.addLast pipeline "codec"       codec)
@@ -285,7 +284,6 @@
     :chunk-size              <chunk-size>
     :inbuf                   <input-channel-buffer>
     :so-backlog              <backlog>
-    :aggregate-length        <body-aggregate-max-size>
     :executor                <ExecutorService used to run/generate sync responses>}
    ```
 
@@ -321,7 +319,6 @@
 (s/def ::chunk-size pos-int?)
 (s/def ::input-channel-buffer pos-int?)
 (s/def ::so-backlog pos-int?)
-(s/def ::aggregate-length pos-int?)
 (s/def ::executor executor?)
 
 (s/def ::options map?)
