@@ -1,6 +1,7 @@
 (ns webfile.engine
   (:require [com.stuartsierra.component :as component]
             [clojure.core.async         :as a]
+            [net.ty.buffer              :as buf]
             [clojure.string             :refer [join]]
             [clojure.tools.logging      :refer [info]])
   (:import java.nio.file.StandardOpenOption
@@ -38,21 +39,11 @@
   [root & elems]
   (.getPath ^FileSystem @fs root (into-array String [(join "-" elems)])))
 
-(defn write-nio-buffer
-  [^FileChannel chan ^ByteBuffer buf]
-  (.write chan buf))
-
-(defn buffers-from
-  [http-content]
-  (let [bb ^ByteBuf (.content ^ByteBufHolder http-content)]
-    (seq (.nioBuffers bb))))
-
-(defn write-bufs
+(defn write-buf
   [root uri i http-content]
   (let [path (path-for root uri (format "%02d" i))
         chan (FileChannel/open path open-options)]
-    (doseq [buf (buffers-from http-content)]
-      (write-nio-buffer chan buf))
+    (.write chan (buf/nio-buffer (buf/as-buffer http-content)))
     (.close chan))
   (inc i))
 
@@ -92,10 +83,9 @@
   [{:keys [root]} _ uri body]
   (a/go
     (loop [i 0]
-      (let [http-content (a/<! body)]
-        (if (nil? http-content)
-          empty-response
-          (recur (write-bufs root uri i http-content)))))))
+      (if-let [http-content (a/<! body)]
+        (recur (write-buf root uri i http-content))
+        empty-response))))
 
 (defmethod handle-operation :error
   [& args]
