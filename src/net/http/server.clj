@@ -68,10 +68,8 @@
            java.nio.ByteBuffer
            clojure.core.async.impl.protocols.Channel))
 
-(def default-chunk-size "" (* 16 1024 1024))
+(def default-chunk-size "" (* 16 1024))
 (def default-inbuf "" 100)
-(def default-aggregated-length "" (* 1024 1024))
-
 
 ;; A Netty ChannelFutureListener used when writing in chunks
 ;; read from a body.
@@ -110,16 +108,6 @@
       (f/with-result [ftr (chan/write-and-flush! ctx http/last-http-content)]
         (chan/close! (chan/channel ftr))))))
 
-(defn parse-num
-  "Parse a long integer, returning nil on failure"
-  [s]
-  (try (Long/parseLong s) (catch Exception _)))
-
-(defn request-length
-  "Try extracting a request length if available"
-  [{:keys [headers] :as req}]
-  (some-> (:content-length headers) parse-num))
-
 (defn write-response
   [ctx executor version {:keys [body] :as resp}]
   (when resp
@@ -156,9 +144,8 @@
    nature of handler adapters."
   ([handler]
    (netty-handler handler {}))
-  ([handler {:keys [inbuf aggregate-length executor]}]
+  ([handler {:keys [inbuf executor]}]
    (let [inbuf      (or inbuf default-inbuf)
-         agg-length (or aggregate-length default-aggregated-length)
          state      (volatile! {})]
      (proxy [ChannelInboundHandlerAdapter] []
        (exceptionCaught [^ChannelHandlerContext ctx e]
@@ -179,16 +166,14 @@
              (get-response @state handler ctx executor))
 
            (chunk/content-chunk? msg)
-           (chunk/enqueue (:body @state) ctx msg)
+           (chunk/enqueue (-> @state :request :body) ctx msg)
 
            :else
            (throw (IllegalArgumentException. "unhandled message chunk on body channel"))))))))
 
 (defn initializer
   "An initializer is a per-connection context creator.
-   For each incoming connections, the HTTP server codec is used,
-   bodies are aggregated up to a certain size and then handed over
-   to the provided handler"
+   For each incoming connections, the HTTP server codec is used."
   [{:keys [chunk-size ring-handler]
     :or   {chunk-size default-chunk-size}
     :as   opts}]
@@ -263,7 +248,6 @@
     :chunk-size              <chunk-size>
     :inbuf                   <input-channel-buffer>
     :so-backlog              <backlog>
-    :aggregate-length        <body-aggregate-max-size>
     :executor                <ExecutorService used to run/generate sync responses>}
    ```
 
@@ -299,7 +283,6 @@
 (s/def ::chunk-size pos-int?)
 (s/def ::input-channel-buffer pos-int?)
 (s/def ::so-backlog pos-int?)
-(s/def ::aggregate-length pos-int?)
 (s/def ::executor executor?)
 
 (s/def ::options map?)
