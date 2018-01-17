@@ -137,6 +137,20 @@
   (let [version (http/protocol-version msg)]
     #(chan/write-and-flush! ctx (http/continue-response version))))
 
+(def request-data-keys
+  "Keys to use when matching requests against pure data"
+  [:request-method :headers :uri :raw-uri :params :get-params])
+
+(def bad-request
+  "Data representation of a bad request as given by
+   Netty's ObjectDecoder class"
+  {:request-method :get
+   :headers        {}
+   :uri            "/bad-request"
+   :raw-uri        "/bad-request"
+   :params         {}
+   :get-params     {}})
+
 (defn ^ChannelHandler netty-handler
   "This is a stateful, per HTTP session adapter which wraps the user
    supplied function.
@@ -163,7 +177,13 @@
                                      :body (a/chan inbuf)
                                      :is-100-continue-expected? (HttpUtil/is100ContinueExpected msg)
                                      :send-100-continue! (send-100-continue-fn ctx msg)))
-             (get-response @state handler ctx executor))
+             (if (= bad-request (select-keys (:request @state) request-data-keys))
+               (do
+                 ;; In this case we have bad trailing content
+                 (a/close! (:body @state))
+                 (buf/release msg)
+                 (-> ctx chan/channel chan/close-future))
+               (get-response @state handler ctx executor)))
 
            (chunk/content-chunk? msg)
            (chunk/enqueue (-> @state :request :body) ctx msg)
@@ -179,8 +199,8 @@
     :as   opts}]
   (proxy [ChannelInitializer] []
     (initChannel [channel]
-      (let [handler-opts (select-keys opts [:inbuf :aggregate-length :executor])
-            codec        (HttpServerCodec. 4096 8192 (int chunk-size))
+      (let [handler-opts (select-keys opts [:inbuf :executor])
+            codec        (HttpServerCodec. 4096 8192 (int chunk-size) true)
             handler      (netty-handler ring-handler handler-opts)
             pipeline     (.pipeline ^io.netty.channel.Channel channel)]
         (.addLast pipeline "codec"      codec)

@@ -4,9 +4,10 @@
             [webfile.engine             :as engine]))
 
 (defn dispatch
-  [engine {:keys [request-method body uri] :as request}]
-  (prn request)
-  (engine/handle-operation engine request-method uri body))
+  [engine {:keys [request-method body headers uri] :as request}]
+  (prn {:uri uri :request-method request-method :headers headers})
+  (doto (engine/handle-operation engine request-method uri body)
+    (partial prn :response)))
 
 (defrecord HttpServer [server engine]
   component/Lifecycle

@@ -41,6 +41,7 @@
 
 (defn write-buf
   [root uri i http-content]
+  (prn {:buffer http-content})
   (let [path (path-for root uri (format "%02d" i))
         chan (FileChannel/open path open-options)]
     (.write chan (buf/nio-buffer (buf/as-buffer http-content)))
