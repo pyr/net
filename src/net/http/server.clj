@@ -96,7 +96,7 @@
 (defn write-raw-response
   "Write an HTTP response out to a Netty Context"
   [^ChannelHandlerContext ctx executor resp body]
-  (f/with-result [ftr (.writeAndFlush ctx resp)]
+  (f/with-result [ftr (chan/write-and-flush! ctx resp)]
     (cond
       (chunk/content-chunk? body)
       (f/with-result [ftr (chan/write-and-flush! ctx (chunk/chunk->http-object body))]
@@ -170,6 +170,20 @@
   (let [version (http/protocol-version msg)]
     #(chan/write-and-flush! ctx (http/continue-response version))))
 
+(def request-data-keys
+  "Keys to use when matching requests against pure data"
+  [:request-method :headers :uri :raw-uri :params :get-params])
+
+(def bad-request
+  "Data representation of a bad request as given by
+   Netty's ObjectDecoder class"
+  {:request-method :get
+   :headers        {}
+   :uri            "/bad-request"
+   :raw-uri        "/bad-request"
+   :params         {}
+   :get-params     {}})
+
 (defn ^ChannelHandler netty-handler
   "This is a stateful, per HTTP session adapter which wraps the user
    supplied function.
@@ -196,7 +210,13 @@
                                      :body (a/chan inbuf)
                                      :is-100-continue-expected? (HttpUtil/is100ContinueExpected msg)
                                      :send-100-continue! (send-100-continue-fn ctx msg)))
-             (get-response @state handler ctx executor))
+             (if (= bad-request (select-keys (:request @state) request-data-keys))
+               (do
+                 ;; In this case we have bad trailing content
+                 (a/close! (:body @state))
+                 (buf/release msg)
+                 (-> ctx chan/channel chan/close-future))
+               (get-response @state handler ctx executor)))
 
            (chunk/content-chunk? msg)
            (write-chunk @state handler ctx (-> msg buf/as-buffer)
