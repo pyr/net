@@ -32,10 +32,14 @@ Net now has full [API Documentation](http://pyr.github.io/net) and
 ## Installation
 
 ```clojure
-    [[spootnik/net "0.3.3-beta18"]]
+    [[spootnik/net "0.3.3-beta19"]]
 ```
 
 ## Changelog
+
+### 0.3.3-beta19
+
+- Handle Netty out-of-band `/bad-request` requests from `HttpObjectDecoder`
 
 ### 0.3.3-beta18
 
