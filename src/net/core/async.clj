@@ -82,3 +82,19 @@
    (validating-chan spec buf-or-n error-value false))
   ([spec buf-or-n]
    (validating-chan spec buf-or-n nil false)))
+
+(defn timeout-pipe
+  "A variation on `clojure.core.async/pipe` which will
+   close if no input is submitted within a given interval."
+  ([max-wait from to close?]
+   (a/go-loop []
+     (let [tm (a/timeout max-wait)]
+       (if (a/alt! from ([v] (when (some? v) (a/>! to v)))
+                   tm   ([_] false))
+         (recur)
+         (when close?
+           (a/close! from)
+           (a/close! to)))))
+   to)
+  ([tmval from to]
+   (timeout-pipe tmval from to true)))
