@@ -213,7 +213,7 @@
              (if (= bad-request (select-keys (:request @state) request-data-keys))
                (do
                  ;; In this case we have bad trailing content
-                 (a/close! (:body @state))
+                 (a/close! (get-in @state [:request :body]))
                  (buf/release msg)
                  (-> ctx chan/channel chan/close-future))
                (get-response @state handler ctx executor)))
