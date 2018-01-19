@@ -78,14 +78,14 @@
     (cond
       (chunk/content-chunk? body)
       (f/with-result [ftr (chan/write-and-flush! ctx (chunk/chunk->http-object body))]
-        (chan/close-future (chan/channel ftr)))
+        (chan/close! (chan/channel ftr)))
 
       (instance? Channel body)
       (chunk/start-write-listener ctx body)
 
       :else
       (f/with-result [ftr (chan/write-and-flush! ctx http/last-http-content)]
-        (chan/close-future (chan/channel ftr))))))
+        (chan/close! (chan/channel ftr))))))
 
 (defn write-response
   [ctx version {:keys [body] :as resp}]
