@@ -131,42 +131,51 @@
    :params         {}
    :get-params     {}})
 
+(defn bad?
+  [request]
+  (= bad-request (select-keys request request-data-keys)))
+
+(defn notify-bad-request!
+  [handler msg ctx e]
+  (when (some? msg)
+    (buf/release msg))
+  (chan/close! ctx)
+  (handler {:type           :error
+            :error          (if (string? e)
+                              (IllegalArgumentException. e)
+                              e)
+            :request-method :error
+            :ctx            ctx}))
+
 (defn ^ChannelHandler netty-handler
   "This is a stateful, per HTTP session adapter which wraps the user
    supplied function.
    We can use volatiles for keeping track of state due to the thread-safe
    nature of handler adapters."
   [handler {:keys [inbuf executor]}]
-  (let [inbuf      (or inbuf default-inbuf)
-        state      (volatile! {})]
+  (let [inbuf (or inbuf default-inbuf)
+        state (volatile! {})]
     (proxy [ChannelInboundHandlerAdapter] []
       (exceptionCaught [^ChannelHandlerContext ctx e]
-        (handler {:type           :error
-                  :request-method :error
-                  :error          e
-                  :ctx            ctx}))
+        (notify-bad-request! handler nil ctx e))
       (channelRead [^ChannelHandlerContext ctx msg]
         (cond
           (instance? HttpRequest msg)
-          (let [in (a/chan inbuf)]
-            (vswap! state assoc
-                    :version (http/protocol-version msg)
-                    :chan    in
-                    :request (assoc (http/->request msg)
-                                    :body in
-                                    :is-100-continue-expected? (HttpUtil/is100ContinueExpected msg)
-                                    :send-100-continue! (send-100-continue-fn ctx msg)))
-            (if (= bad-request (select-keys (:request @state) request-data-keys))
-              (try
-                ;; In this case we have bad trailing content
-                (handler {:type :error :request-method :error
-                          :error (IllegalArgumentException. "trailing content in request")})
-                (buf/release msg)
-                (chan/close! ctx)
-                (a/close! in)
-                (catch Exception e
-                  (handler {:type :error :request-method :error :error e :ctx ctx})))
-              (get-response @state handler ctx executor)))
+          (let [request (http/->request msg)]
+            (if (bad? request)
+              (notify-bad-request! handler msg ctx
+                                   "Trailing content on request")
+              (let [in      (a/chan inbuf)
+                    version (http/protocol-version msg)
+                    bodyreq (assoc request
+                                   :body in
+                                   :is-100-continue-expected? (HttpUtil/is100ContinueExpected msg)
+                                   :send-100-continue! (send-100-continue-fn ctx msg))]
+                (get-response (vswap! state assoc
+                                      :version version
+                                      :chan in
+                                      :request bodyreq)
+                              handler ctx executor))))
 
           (chunk/content-chunk? msg)
           (chunk/enqueue (:chan @state) ctx msg)

@@ -1,5 +1,6 @@
 (ns webfile.http
   (:require [com.stuartsierra.component :as component]
+            [clojure.tools.logging      :refer [debug error]]
             [clojure.core.async         :as a]
             [net.http.server            :as http]
             [webfile.engine             :as engine]))
@@ -9,10 +10,11 @@
   (try (Long/parseLong x) (catch Exception _)))
 
 (defn dispatch
-  [engine {:keys [request-method body error headers uri] :as request}]
+  [engine {:keys [request-method body headers uri] :as request}]
+  (debug "request" (select-keys request http/request-data-keys))
   (cond
     (= request-method :error)
-    (prn {:error request})
+    (error (:error request) "cannot continue")
 
     (if-let [len (some-> headers :content-length str->num)] (neg? len))
     (do
