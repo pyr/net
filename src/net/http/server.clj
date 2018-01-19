@@ -68,32 +68,12 @@
            java.nio.ByteBuffer
            clojure.core.async.impl.protocols.Channel))
 
-(def default-chunk-size "" (* 16 1024))
+(def default-chunk-size "" (* 1024 1024))
 (def default-inbuf "" 100)
-
-;; A Netty ChannelFutureListener used when writing in chunks
-;; read from a body.
-;;
-;; The first time, the listener will be called with a nil future
-;; meaning that a payload can be read from the body channel and sent-out
-;; re-using the same listener for completion. If no chunk could be read
-;; from the body channel, close the channel.
-;;
-;; When called with an actual future, apply the same logic, re-using the listener
-;; up to the point where no more chunks have to be sent out or an error occurs.
-(f/deflistener write-response-listener
-  [this ftr [^ChannelHandlerContext ctx ^Channel body executor]]
-  (nc/with-executor executor
-    (if (or (nil? ftr) (f/complete? ftr))
-      (let [chunk (a/<!! body)
-            msg   (if chunk (chunk/chunk->http-object chunk) http/last-http-content)]
-        (-> (chan/write-and-flush! ctx msg)
-            (f/add-listener (if chunk this f/close-listener))))
-      (a/close! body))))
 
 (defn write-raw-response
   "Write an HTTP response out to a Netty Context"
-  [^ChannelHandlerContext ctx executor resp body]
+  [^ChannelHandlerContext ctx resp body]
   (f/with-result [ftr (chan/write-and-flush! ctx resp)]
     (cond
       (chunk/content-chunk? body)
@@ -101,17 +81,16 @@
         (chan/close! (chan/channel ftr)))
 
       (instance? Channel body)
-      (do
-        (f/operation-complete (write-response-listener ctx body executor)))
+      (chunk/start-write-listener ctx body)
 
       :else
       (f/with-result [ftr (chan/write-and-flush! ctx http/last-http-content)]
         (chan/close! (chan/channel ftr))))))
 
 (defn write-response
-  [ctx executor version {:keys [body] :as resp}]
+  [ctx version {:keys [body] :as resp}]
   (when resp
-    (write-raw-response ctx executor
+    (write-raw-response ctx
                         (http/data->response resp version)
                         body)))
 
@@ -120,17 +99,18 @@
    Execute the handler on it and publish the response."
   [{:keys [request version]} handler ctx executor]
   (nc/with-executor executor
-    (let [resp     (handler request)
-          respond! (partial write-response ctx executor version)]
-      (cond
-        (instance? Channel resp)
-        (a/take! resp respond!)
+    (try
+      (let [resp     (handler request)
+            respond! (partial write-response ctx version)]
+        (cond
+          (instance? Channel resp)
+          (a/take! resp respond!)
 
-        (map? resp)
-        (respond! resp)
+          (map? resp)
+          (respond! resp)
 
-        :else
-        (throw (IllegalArgumentException. "unhandled response type"))))))
+          :else
+          (throw (IllegalArgumentException. "unhandled response type")))))))
 
 (defn send-100-continue-fn
   [^ChannelHandlerContext ctx ^HttpRequest msg]
@@ -156,7 +136,7 @@
    supplied function.
    We can use volatiles for keeping track of state due to the thread-safe
    nature of handler adapters."
-  [handler {:keys [inbuf executor transform]}]
+  [handler {:keys [inbuf executor]}]
   (let [inbuf      (or inbuf default-inbuf)
         state      (volatile! {})]
     (proxy [ChannelInboundHandlerAdapter] []
@@ -168,27 +148,35 @@
       (channelRead [^ChannelHandlerContext ctx msg]
         (cond
           (instance? HttpRequest msg)
-          (let [[in out] (chunk/body-chan inbuf transform)]
+          (let [in (a/chan inbuf)]
             (vswap! state assoc
                     :version (http/protocol-version msg)
                     :chan    in
                     :request (assoc (http/->request msg)
-                                    :body out
+                                    :body in
                                     :is-100-continue-expected? (HttpUtil/is100ContinueExpected msg)
                                     :send-100-continue! (send-100-continue-fn ctx msg)))
             (if (= bad-request (select-keys (:request @state) request-data-keys))
-              (do
+              (try
                 ;; In this case we have bad trailing content
-                (a/close! (:chan @state))
+                (handler {:type :error :request-method :error
+                          :error (IllegalArgumentException. "trailing content in request")})
                 (buf/release msg)
-                (-> ctx chan/channel chan/close-future))
+                (chan/close! ctx)
+                (a/close! in)
+                (catch Exception e
+                  (handler {:type :error :request-method :error :error e :ctx ctx})))
               (get-response @state handler ctx executor)))
 
           (chunk/content-chunk? msg)
           (chunk/enqueue (:chan @state) ctx msg)
 
           :else
-          (throw (IllegalArgumentException. "unhandled message chunk on body channel")))))))
+          (do
+            (buf/release msg)
+            (chan/close! ctx)
+            (a/close! (:chan @state))
+            (throw (IllegalArgumentException. "unhandled message chunk on body channel"))))))))
 
 (defn initializer
   "An initializer is a per-connection context creator.
@@ -198,8 +186,8 @@
     :as   opts}]
   (proxy [ChannelInitializer] []
     (initChannel [channel]
-      (let [handler-opts (select-keys opts [:inbuf :executor :transform])
-            codec        (HttpServerCodec. 4096 8192 (int chunk-size) true)
+      (let [handler-opts (select-keys opts [:inbuf :executor])
+            codec        (HttpServerCodec. 4096 8192 (int chunk-size))
             handler      (netty-handler ring-handler handler-opts)
             pipeline     (.pipeline ^io.netty.channel.Channel channel)]
         (.addLast pipeline "codec"      codec)
@@ -279,11 +267,9 @@
    (let [boss-group  (http/make-boss-group options)
          [host port] (get-host-port options)]
      (try
-       (let [bootstrap (doto (ServerBootstrap.)
-                         (set-so-backlog! options)
-                         (bs/set-group! boss-group)
-                         (http/set-optimal-server-channel! (:disable-epoll options))
-                         (bs/set-child-handler! (initializer options)))
+       (let [bootstrap (bs/server-bootstrap {:config  {:so-backlog 256}
+                                             :group   boss-group
+                                             :handler (initializer options)})
              channel   (-> bootstrap
                            (http/set-log-handler! options)
                            (bs/bind! host port)

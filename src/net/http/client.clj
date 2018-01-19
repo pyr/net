@@ -101,16 +101,6 @@
       :group   (http/make-boss-group options)
       :ssl-ctx (ssl/client-context ssl)})))
 
-(f/deflistener write-listener
-  [this ftr [^ChannelHandlerContext ctx ^Channel body]]
-  (if (or (nil? ftr) (f/complete? ftr))
-    (a/take!
-     body
-     #(let [msg (if % (chunk/chunk->http-object %) http/last-http-content)]
-        (cond-> (chan/write-and-flush! ctx msg)
-          (some?) (f/add-listener this))))
-    (a/close! body)))
-
 (defn async-request
   "Execute an asynchronous HTTP request, produce the response
    asynchronously on the provided `handler` function.
@@ -135,7 +125,7 @@
          req         (req/data->request uri request-map)]
      (f/with-result [ftr (chan/write-and-flush! chan req)]
        (if (instance? Channel body)
-         (f/operation-complete (write-listener chan body))
+         (chunk/start-write-listener chan body)
          (chan/write-and-flush! chan body))))))
 
 (defn request

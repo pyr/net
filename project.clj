@@ -23,6 +23,5 @@
                                     [com.stuartsierra/component "0.3.2"]]}}
   :dependencies [[org.clojure/clojure       "1.9.0"]
                  [org.clojure/core.async    "0.4.474"]
-                 [io.netty/netty-all        "4.1.19.Final"]
-                 [cheshire                  "5.8.0"]]
+                 [io.netty/netty-all        "4.1.19.Final"]]
   :global-vars {*warn-on-reflection* true})

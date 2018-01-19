@@ -2,10 +2,12 @@
   (:require [net.ty.buffer      :as buf]
             [net.ty.channel     :as chan]
             [net.http           :as http]
+            [net.ty.future      :as f]
             [clojure.core.async :as a]
             [net.core.async     :refer [put!]])
   (:import io.netty.buffer.Unpooled
            io.netty.buffer.ByteBuf
+           io.netty.channel.ChannelHandlerContext
            io.netty.handler.codec.http.DefaultHttpContent
            io.netty.handler.codec.http.HttpContent
            java.io.InputStream
@@ -117,3 +119,35 @@
     (instance? Channel x) x
     :else                 (throw (IllegalArgumentException.
                                   "Cannot coerce body to HttpContent"))))
+
+(defn write-listener-callback
+  "Used hand in hand with "
+  [listener ctx]
+  (fn [input]
+    (let [msg (if (some? input)
+                (chunk->http-object input)
+                http/last-http-content)]
+      (f/add-listener (chan/write-and-flush! ctx msg)
+                      (if (some? msg)
+                        listener
+                        chan/close-future)))))
+
+;; A Netty ChannelFutureListener used when writing in chunks
+;; read from a body.
+;;
+;; The first time, the listener will be called with a nil future
+;; meaning that a payload can be read from the body channel and sent-out
+;; re-using the same listener for completion. If no chunk could be read
+;; from the body channel, close the channel.
+;;
+;; When called with an actual future, apply the same logic, re-using the listener
+;; up to the point where no more chunks have to be sent out or an error occurs.
+(f/deflistener write-listener
+  [this ftr [^ChannelHandlerContext ctx ^Channel ch]]
+  (if (or (nil? ftr) (f/complete? ftr))
+    (a/take! ch (write-listener-callback this ctx))
+    (a/close! ch)))
+
+(defn start-write-listener
+  [ctx ch]
+  (f/operation-complete (write-listener ctx ch)))

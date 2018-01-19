@@ -1,5 +1,6 @@
 (ns webfile.server
   (:require [com.stuartsierra.component :as component]
+            [clojure.core.async         :as a]
             [webfile.http               :refer [make-http]]
             [webfile.engine             :refer [make-engine]]
             [clojure.tools.logging      :refer [debug info error warn]]))

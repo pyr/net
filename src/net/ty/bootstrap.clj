@@ -81,8 +81,7 @@
 (defn ^ServerBootstrap server-bootstrap
   "Build a server bootstrap from a configuration map"
   [config]
-  (when-not (s/valid? ::server-bootstrap-schema config)
-    (throw (IllegalArgumentException. "invalid server bootstrap configuration")))
+  (s/assert ::server-bootstrap-schema config)
   (let [bs (ServerBootstrap.)
         group ^EventLoopGroup (:group config)]
     (if-let [c ^EventLoopGroup (:child-group config)]
@@ -119,9 +118,7 @@
 (defn ^AbstractBootstrap bootstrap
   "Build a client bootstrap from a configuration map"
   [config]
-  (when-not (s/valid? ::bootstrap-schema config)
-    (println (s/explain-out (s/explain-data ::bootstrap-schema config)))
-    (throw (IllegalArgumentException. "invalid bootstrap configuration")))
+  (s/assert ::bootstrap-schema config)
   (let [bs (Bootstrap.)]
     (.group bs (or (:group config) (epoll-event-loop-group)))
     (.channel bs (or (:channel config) epoll-socket-channel))

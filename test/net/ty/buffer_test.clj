@@ -219,11 +219,17 @@
       (doseq [p parts]
         (augment-composite cb p)
         (a/put! ch p))
-      (a/put! ch cb))
-    (a/close! ch)
-    (Thread/sleep 200)
-    (System/gc)
-    (Thread/sleep 200)
-    (System/gc)
-    (let [vals (loop [res []] (if-let [v (a/<!! ch)] (recur (conj res v)) res))]
-      (prn (map refcount vals)))))
+      (a/put! ch cb)
+      (a/close! ch)
+
+      ;; Ensure
+      (Thread/sleep 200)
+      (System/gc)
+      (Thread/sleep 200)
+      (System/gc)
+        ;;
+      (let [vals (loop [res []] (if-let [v (a/<!! ch)] (recur (conj res v)) res))]
+        (is (every? (partial = 1) (map refcount vals)))
+        ;; We enqueued the composite last, we can now release it
+        (release (last vals))
+        (is (every? zero? (map refcount vals)))))))
