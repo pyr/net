@@ -16,4 +16,4 @@
                "foobar\n"]
         bufs  (mapv buf/wrapped-string input)]
     (is (= {:values (reduce str input)}
-           (transduce (:xf decoder) (:reducer decoder) (:init decoder) bufs)))))
+           (transduce (:xf transform) (:reducer transform) (:init transform) bufs)))))
