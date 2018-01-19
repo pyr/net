@@ -68,10 +68,8 @@
            java.nio.ByteBuffer
            clojure.core.async.impl.protocols.Channel))
 
-(def default-chunk-size "" (* 16 1024 1024))
+(def default-chunk-size "" (* 16 1024))
 (def default-inbuf "" 100)
-(def default-aggregated-length "" (* 1024 1024))
-
 
 ;; A Netty ChannelFutureListener used when writing in chunks
 ;; read from a body.
@@ -211,11 +209,11 @@
                                      :is-100-continue-expected? (HttpUtil/is100ContinueExpected msg)
                                      :send-100-continue! (send-100-continue-fn ctx msg)))
              (if (= bad-request (select-keys (:request @state) request-data-keys))
-               (do
-                 ;; In this case we have bad trailing content
-                 (a/close! (get-in @state [:request :body]))
+               (try
                  (buf/release msg)
-                 (-> ctx chan/channel chan/close-future))
+                 (chan/close! (chan/channel ctx))
+                 (a/close! (get-in @state [:request :body]))
+                 (catch Exception _))
                (get-response @state handler ctx executor)))
 
            (chunk/content-chunk? msg)
@@ -236,7 +234,7 @@
   (proxy [ChannelInitializer] []
     (initChannel [channel]
       (let [handler-opts (select-keys opts [:inbuf :executor])
-            codec        (HttpServerCodec. 4096 8192 (int chunk-size) true)
+            codec        (HttpServerCodec. 4096 8192 (int chunk-size))
             handler      (netty-handler ring-handler handler-opts)
             pipeline     (.pipeline ^io.netty.channel.Channel channel)]
         (.addLast pipeline "codec"       codec)
