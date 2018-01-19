@@ -7,13 +7,7 @@
   ([final] (json/parse-string final true))
   ([s in]  (str s (buf/to-string in))))
 
-
-(def transform
+(def decoder
   {:reducer json-reducer
    :xf      (map identity)
    :init    ""})
-
-(comment
-  (http/client {:uri       "http://localhost:8000"
-                :transform json/transform})
-  )

@@ -22,4 +22,4 @@
                      {:foo "bar"}
                      {:foo "bar"}
                      {:foo "bar"}]}
-           (transduce (:xf transform) (:reducer transform) (:init transform) bufs)))))
+           (transduce (:xf decoder) (:reducer decoder) (:init decoder) bufs)))))

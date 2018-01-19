@@ -156,40 +156,39 @@
    supplied function.
    We can use volatiles for keeping track of state due to the thread-safe
    nature of handler adapters."
-  ([handler]
-   (netty-handler handler {}))
-  ([handler {:keys [inbuf executor]}]
-   (let [inbuf      (or inbuf default-inbuf)
-         state      (volatile! {})]
-     (proxy [ChannelInboundHandlerAdapter] []
-       (exceptionCaught [^ChannelHandlerContext ctx e]
-         (handler {:type           :error
-                   :request-method :error
-                   :error          e
-                   :ctx            ctx}))
-       (channelRead [^ChannelHandlerContext ctx msg]
-         (cond
-           (instance? HttpRequest msg)
-           (do
-             (vswap! state assoc
-                     :version (http/protocol-version msg)
-                     :request (assoc (http/->request msg)
-                                     :body (a/chan inbuf)
-                                     :is-100-continue-expected? (HttpUtil/is100ContinueExpected msg)
-                                     :send-100-continue! (send-100-continue-fn ctx msg)))
-             (if (= bad-request (select-keys (:request @state) request-data-keys))
-               (do
-                 ;; In this case we have bad trailing content
-                 (a/close! (get-in @state [:request :body]))
-                 (buf/release msg)
-                 (-> ctx chan/channel chan/close-future))
-               (get-response @state handler ctx executor)))
+  [handler {:keys [inbuf executor transform]}]
+  (let [inbuf      (or inbuf default-inbuf)
+        state      (volatile! {})]
+    (proxy [ChannelInboundHandlerAdapter] []
+      (exceptionCaught [^ChannelHandlerContext ctx e]
+        (handler {:type           :error
+                  :request-method :error
+                  :error          e
+                  :ctx            ctx}))
+      (channelRead [^ChannelHandlerContext ctx msg]
+        (cond
+          (instance? HttpRequest msg)
+          (let [[in out] (chunk/body-chan inbuf transform)]
+            (vswap! state assoc
+                    :version (http/protocol-version msg)
+                    :chan    in
+                    :request (assoc (http/->request msg)
+                                    :body out
+                                    :is-100-continue-expected? (HttpUtil/is100ContinueExpected msg)
+                                    :send-100-continue! (send-100-continue-fn ctx msg)))
+            (if (= bad-request (select-keys (:request @state) request-data-keys))
+              (do
+                ;; In this case we have bad trailing content
+                (a/close! (:chan @state))
+                (buf/release msg)
+                (-> ctx chan/channel chan/close-future))
+              (get-response @state handler ctx executor)))
 
-           (chunk/content-chunk? msg)
-           (chunk/enqueue (-> @state :request :body) ctx msg)
+          (chunk/content-chunk? msg)
+          (chunk/enqueue (:chan @state) ctx msg)
 
-           :else
-           (throw (IllegalArgumentException. "unhandled message chunk on body channel"))))))))
+          :else
+          (throw (IllegalArgumentException. "unhandled message chunk on body channel")))))))
 
 (defn initializer
   "An initializer is a per-connection context creator.
@@ -199,7 +198,7 @@
     :as   opts}]
   (proxy [ChannelInitializer] []
     (initChannel [channel]
-      (let [handler-opts (select-keys opts [:inbuf :executor])
+      (let [handler-opts (select-keys opts [:inbuf :executor :transform])
             codec        (HttpServerCodec. 4096 8192 (int chunk-size) true)
             handler      (netty-handler ring-handler handler-opts)
             pipeline     (.pipeline ^io.netty.channel.Channel channel)]

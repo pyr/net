@@ -15,6 +15,19 @@
            java.nio.ByteBuffer
            clojure.core.async.impl.protocols.Channel))
 
+(defn body-chan
+  [inbuf {:keys [reducer xf init]}]
+  (cond
+    (some? reducer)
+    (let [ch (a/chan inbuf)]
+      [ch (a/transduce xf reducer (or init (reducer)) ch)])
+
+    (some? xf)
+    (let [ch (a/chan inbuf xf)] [ch ch])
+
+    :else
+    (let [ch (a/chan inbuf)] [ch ch])))
+
 (defn input-stream-chunk
   "Fill up a ByteBuf with the contents of an input stream"
   [^InputStream is]
@@ -93,6 +106,7 @@
   [sink ctx msg]
   (put! sink (buf/as-buffer msg) (backpressure-fn ctx) (close-fn msg ctx))
   (when (http/last-http-content? msg)
+    (-> ctx chan/channel chan/close-future)
     (a/close! sink)))
 
 (defn prepare-body

@@ -65,24 +65,11 @@
       ;; This actually releases the content
       (buf/release (buf/as-buffer msg)))))
 
-(defn body-chan
-  [inbuf {:keys [reducer xf init]}]
-  (cond
-    (some? reducer)
-    (let [ch (a/chan inbuf)]
-      [ch (a/transduce xf reducer (or init (reducer)) ch)])
-
-    (some? xf)
-    (let [ch (a/chan inbuf xf)] [ch ch])
-
-    :else
-    (let [ch (a/chan inbuf)] [ch ch])))
-
 (defn ^ChannelInboundHandlerAdapter netty-handler
   "Simple netty-handler, everything may happen in
    channel read, since we're expecting a full http request."
   [f transform]
-  (let [[in out] (body-chan default-inbuf transform)]
+  (let [[in out] (chunk/body-chan default-inbuf transform)]
     (proxy [ChannelInboundHandlerAdapter] []
       (exceptionCaught [^ChannelHandlerContext ctx e]
         (f {:status 5555 :error e}))
