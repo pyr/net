@@ -32,10 +32,21 @@ Net now has full [API Documentation](http://pyr.github.io/net) and
 ## Installation
 
 ```clojure
-    [[spootnik/net "0.3.3-beta19"]]
+    [[spootnik/net "0.3.3-beta20"]]
 ```
 
 ## Changelog
+
+### 0.3.3-beta20
+
+- Adapt `net.http.client` to match server behavior: responses contain
+  a `core.async` **Channel** body
+- Handle *transforms* over the body, i.e: help callers supply a
+  transducer when requesting
+- Better handle error conditions
+- Add `net.core.async/timeout-pipe` to help ensure upstream feeds a
+  channel fast enough
+  
 
 ### 0.3.3-beta19
 
