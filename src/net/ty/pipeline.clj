@@ -9,6 +9,7 @@
            io.netty.channel.ChannelHandlerContext
            io.netty.channel.ChannelHandler
            io.netty.channel.ChannelInitializer
+           io.netty.channel.ChannelPipeline
            io.netty.handler.timeout.ReadTimeoutException
            io.netty.handler.timeout.ReadTimeoutHandler
            io.netty.handler.codec.string.StringDecoder
@@ -392,3 +393,7 @@
        (flush! ~ctx))
      (isSharable []
        true)))
+
+(defn add-last
+  [^ChannelPipeline pipeline ^String nick ^ChannelHandler handler]
+  (.addLast pipeline nick handler))

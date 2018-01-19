@@ -81,8 +81,7 @@
 (defn ^ServerBootstrap server-bootstrap
   "Build a server bootstrap from a configuration map"
   [config]
-  (when-not (s/valid? ::server-bootstrap-schema config)
-    (throw (IllegalArgumentException. "invalid server bootstrap configuration")))
+  (s/assert ::server-bootstrap-schema config)
   (let [bs (ServerBootstrap.)
         group ^EventLoopGroup (:group config)]
     (if-let [c ^EventLoopGroup (:child-group config)]
@@ -119,9 +118,7 @@
 (defn ^AbstractBootstrap bootstrap
   "Build a client bootstrap from a configuration map"
   [config]
-  (when-not (s/valid? ::bootstrap-schema config)
-    (println (s/explain-out (s/explain-data ::bootstrap-schema config)))
-    (throw (IllegalArgumentException. "invalid bootstrap configuration")))
+  (s/assert ::bootstrap-schema config)
   (let [bs (Bootstrap.)]
     (.group bs (or (:group config) (epoll-event-loop-group)))
     (.channel bs (or (:channel config) epoll-socket-channel))
@@ -146,8 +143,19 @@
    (.connect bs))
   ([^Bootstrap bs ^SocketAddress sa]
    (.connect bs sa))
-  ([^Bootstrap bs ^InetAddress x y]
-   (.connect bs x (int y))))
+  ([^Bootstrap bs x y]
+   (cond
+     (string? x)
+     (.connect bs ^String x (int y))
+
+     (instance? InetAddress x)
+     (.connect bs ^InetAddress x (int y))
+
+     (instance? SocketAddress x)
+     (.connect bs ^SocketAddress x ^SocketAddress y)
+
+     :else
+     (throw (IllegalArgumentException. "Invalid arguments to connect")))))
 
 (defn local-address!
   "Sets the bootstrap's local address. Accepts either a SocketAddress or

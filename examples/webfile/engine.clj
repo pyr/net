@@ -39,16 +39,11 @@
   [root & elems]
   (.getPath ^FileSystem @fs root (into-array String [(join "-" elems)])))
 
-(defn write-nio-buffer
-  [^FileChannel chan ^ByteBuffer buf]
-  (.write chan buf))
-
 (defn write-buf
   [root uri i http-content]
-  (prn {:buffer http-content})
   (let [path (path-for root uri (format "%02d" i))
         chan (FileChannel/open path open-options)]
-    (write-nio-buffer chan (buf/nio-buffer (buf/as-buffer http-content)))
+    (.write chan (buf/nio-buffer (buf/as-buffer http-content)))
     (.close chan))
   (inc i))
 
@@ -57,7 +52,8 @@
   (cond
     (re-find #"(?i)stream" uri)
     {:status  200
-     :headers {"Content-Transfer" "chunked"}
+     :headers {:transfer-encoding "chunked"
+               :connection        "close"}
      :body    (let [body (a/chan)]
                 (a/go
                   (dotimes [i 5]
@@ -70,12 +66,12 @@
     (a/go
       (a/<! (a/timeout 3000))
       {:status  200
-       :headers {"Connection" "close"}
+       :headers {:connection "close"}
        :body    "sorry, running late!\n"})
 
     :else
-    {:status 200
-     :headers {"Connection" "close"}
+    {:status  200
+     :headers {:connection "close"}
      :body    "A standard body\n"}))
 
 (defmulti handle-operation (fn [_ op _ _] op))
@@ -90,11 +86,7 @@
     (loop [i 0]
       (if-let [http-content (a/<! body)]
         (recur (write-buf root uri i http-content))
-        (doto empty-response (prn))))))
-
-(defmethod handle-operation :error
-  [& args]
-  (content-response 500 (pr-str args)))
+        empty-response))))
 
 (defmethod handle-operation :default
   [& _]

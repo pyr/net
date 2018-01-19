@@ -1,5 +1,5 @@
 {:paths ["src"]
- :deps 
+ :deps
  {org.clojure/clojure {:mvn/version "1.9.0"}
   org.clojure/core.async {:mvn/version "0.4.474"}
   io.netty/netty-all {:mvn/version "4.1.19.Final"}}}
