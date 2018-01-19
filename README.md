@@ -1,5 +1,5 @@
 net: A clojure Netty companion
-================================
+===============================
 
 [![Build Status](https://secure.travis-ci.org/pyr/net.png)](http://travis-ci.org/pyr/net)
 
@@ -32,12 +32,12 @@ Net now has full [API Documentation](http://pyr.github.io/net) and
 ## Installation
 
 ```clojure
-    [[spootnik/net "0.3.3-beta21"]]
+    [[spootnik/net "0.3.3-beta22"]]
 ```
 
 ## Changelog
 
-### 0.3.3-beta21
+### 0.3.3-beta22
 
 - Adapt `net.http.client` to match server behavior: responses contain
   a `core.async` **Channel** body

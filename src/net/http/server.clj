@@ -78,14 +78,14 @@
     (cond
       (chunk/content-chunk? body)
       (f/with-result [ftr (chan/write-and-flush! ctx (chunk/chunk->http-object body))]
-        (chan/close! (chan/channel ftr)))
+        (chan/close-future (chan/channel ftr)))
 
       (instance? Channel body)
       (chunk/start-write-listener ctx body)
 
       :else
       (f/with-result [ftr (chan/write-and-flush! ctx http/last-http-content)]
-        (chan/close! (chan/channel ftr))))))
+        (chan/close-future (chan/channel ftr))))))
 
 (defn write-response
   [ctx version {:keys [body] :as resp}]
@@ -136,13 +136,15 @@
   (= bad-request (select-keys request request-data-keys)))
 
 (defn notify-bad-request!
-  [handler msg ctx e]
+  [handler msg ctx ch e]
   (when (some? msg)
     (buf/release msg))
-  (chan/close! ctx)
+  (chan/close-future (chan/channel ctx))
+  (when (some? ch)
+    (a/close! ch))
   (handler {:type           :error
             :error          (if (string? e)
-                              (IllegalArgumentException. e)
+                              (IllegalArgumentException. ^String e)
                               e)
             :request-method :error
             :ctx            ctx}))
@@ -157,13 +159,13 @@
         state (volatile! {})]
     (proxy [ChannelInboundHandlerAdapter] []
       (exceptionCaught [^ChannelHandlerContext ctx e]
-        (notify-bad-request! handler nil ctx e))
+        (notify-bad-request! handler nil ctx (:chan @state) e))
       (channelRead [^ChannelHandlerContext ctx msg]
         (cond
           (instance? HttpRequest msg)
           (let [request (http/->request msg)]
             (if (bad? request)
-              (notify-bad-request! handler msg ctx
+              (notify-bad-request! handler msg ctx (:chan @state)
                                    "Trailing content on request")
               (let [in      (a/chan inbuf)
                     version (http/protocol-version msg)
