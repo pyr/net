@@ -15,5 +15,5 @@
                "foobar\n"
                "foobar\n"]
         bufs  (mapv buf/wrapped-string input)]
-    (is (= {:values (reduce str input)}
+    (is (= (reduce str input)
            (transduce (:xf transform) (:reducer transform) (:init transform) bufs)))))
