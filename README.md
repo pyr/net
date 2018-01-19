@@ -32,12 +32,12 @@ Net now has full [API Documentation](http://pyr.github.io/net) and
 ## Installation
 
 ```clojure
-    [[spootnik/net "0.3.3-beta22"]]
+    [[spootnik/net "0.3.3-beta23"]]
 ```
 
 ## Changelog
 
-### 0.3.3-beta22
+### 0.3.3-beta23
 
 - Adapt `net.http.client` to match server behavior: responses contain
   a `core.async` **Channel** body
