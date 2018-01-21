@@ -32,9 +32,6 @@
            io.netty.channel.ChannelFutureListener
            io.netty.channel.nio.NioEventLoopGroup
            io.netty.channel.socket.nio.NioServerSocketChannel
-           io.netty.channel.epoll.Epoll
-           io.netty.channel.epoll.EpollServerSocketChannel
-           io.netty.channel.epoll.EpollEventLoopGroup
            io.netty.handler.logging.LoggingHandler
            io.netty.handler.logging.LogLevel
            io.netty.handler.codec.http.FullHttpRequest
@@ -280,6 +277,10 @@
      (try
        (let [bootstrap (bs/server-bootstrap {:config  {:so-backlog 256}
                                              :group   boss-group
+                                             :channel (if (or (:disable-epoll? options)
+                                                              (http/epoll?))
+                                                        bs/nio-server-socket-channel
+                                                        bs/epoll-server-socket-channel)
                                              :handler (initializer options)})
              channel   (-> bootstrap
                            (http/set-log-handler! options)
