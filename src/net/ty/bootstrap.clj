@@ -71,12 +71,16 @@
 
 (defn ^EventLoopGroup nio-event-loop-group
   "Yield a new NioEventLoopGroup"
-  []
-  (NioEventLoopGroup.))
+  ([nb-threads]
+   (NioEventLoopGroup. nb-threads))
+  ([]
+   (nio-event-loop-group 0)))
 
 (defn ^EventLoopGroup epoll-event-loop-group
-  []
-  (EpollEventLoopGroup.))
+  ([nb-threads]
+   (EpollEventLoopGroup. nb-threads))
+  ([]
+   epoll-event-loop-group 0))
 
 (defn ^ServerBootstrap server-bootstrap
   "Build a server bootstrap from a configuration map"
