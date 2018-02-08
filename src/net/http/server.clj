@@ -278,7 +278,7 @@
        (let [bootstrap (bs/server-bootstrap {:config  {:so-backlog 256}
                                              :group   boss-group
                                              :channel (if (or (:disable-epoll? options)
-                                                              (http/epoll?))
+                                                              (not (http/epoll?)))
                                                         bs/nio-server-socket-channel
                                                         bs/epoll-server-socket-channel)
                                              :handler (initializer options)})

@@ -30,3 +30,19 @@
                               :body      (buf/wrapped-string payload)
                               :transform st/transform})]
     (assoc resp :body (a/<!! (:body resp)))))
+
+
+(def success-response
+  {:status 200
+   :headers {:connection "close"}})
+
+(def success-handler
+  (constantly success-response))
+
+(deftest success-server
+  (let [port   (get-port)
+        server (server/run-server {:port port} success-handler)
+        client (client/build-client {})]
+    (testing "referential transparency"
+      (= (client/request {:request-method :get :uri (str "http://localhost:" port)})
+         success-response))))
