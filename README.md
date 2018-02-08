@@ -32,10 +32,16 @@ Net now has full [API Documentation](http://pyr.github.io/net) and
 ## Installation
 
 ```clojure
-    [[spootnik/net "0.3.3-beta26"]]
+    [[spootnik/net "0.3.3-beta27"]]
 ```
 
 ## Changelog
+
+### 0.3.3-beta27
+
+- Start introducing bridged channels for tighter integration between Netty and core.async.
+- Ensure event-loop-groups can be parameterized
+- Allow supplying query args as a map in HTTP requests
 
 ### 0.3.3-beta26
 
