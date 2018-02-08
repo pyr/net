@@ -74,13 +74,13 @@
   ([nb-threads]
    (NioEventLoopGroup. nb-threads))
   ([]
-   (nio-event-loop-group 0)))
+   (NioEventLoopGroup.)))
 
 (defn ^EventLoopGroup epoll-event-loop-group
   ([nb-threads]
    (EpollEventLoopGroup. nb-threads))
   ([]
-   epoll-event-loop-group 0))
+   (EpollEventLoopGroup.)))
 
 (defn ^ServerBootstrap server-bootstrap
   "Build a server bootstrap from a configuration map"
