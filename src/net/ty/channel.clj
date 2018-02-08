@@ -1,6 +1,10 @@
 (ns net.ty.channel
   "Handy functions to deal with netty channels"
   (:refer-clojure :exclude [await])
+  (:require [clojure.core.async                :as a]
+            [clojure.core.async.impl.channels  :as c]
+            [clojure.core.async.impl.protocols :as p]
+            [clojure.core.async.impl.dispatch  :as dispatch])
   (:import io.netty.channel.ChannelFuture
            io.netty.channel.ChannelFutureListener
            io.netty.channel.Channel
@@ -12,7 +16,12 @@
            io.netty.util.AttributeKey
            io.netty.util.Attribute
            io.netty.util.concurrent.GlobalEventExecutor
-           io.netty.bootstrap.AbstractBootstrap$PendingRegistrationPromise))
+           io.netty.bootstrap.AbstractBootstrap$PendingRegistrationPromise
+           java.util.concurrent.ArrayBlockingQueue
+           java.util.concurrent.locks.Lock))
+
+(defprotocol ChannelBridge
+  (offer-val [this v]))
 
 (defn await!
   "Wait on a channel"
@@ -27,6 +36,10 @@
 (defn active?
   [^Channel channel]
   (.isActive channel))
+
+(defn open?
+  [^Channel channel]
+  (.isOpen channel))
 
 (defprotocol ChannelHolder
   (get-channel [this] "Extract channel from holder"))
@@ -215,3 +228,36 @@
 (defn channel?
   [x]
   (instance? Channel x))
+
+(defn taker-fn
+  [^Lock handler val]
+  (.lock handler)
+  (let [f (and (p/active? handler) (p/commit handler))]
+    (.unlock handler)
+    (f val)))
+
+(defn read-channel
+  "Bridge a Netty Channel to a readable channel"
+  [src bufsize]
+  (let [buffered (ArrayBlockingQueue. (int bufsize))
+        takers   (ArrayBlockingQueue. (int bufsize))]
+    (reify p/ReadPort p/Channel ChannelBridge
+      (close! [this]
+        (close! src)
+        (doseq [taker takers]
+          (dispatch/run (taker-fn taker nil))))
+      (closed? [this]
+        (not (open? (channel src))))
+      (take! [this handler]
+        (if-let [val (.poll buffered)]
+          (c/box val)
+          (if-not (.offer takers handler)
+            (throw (ex-info "cannot enqueue read-channel taker"
+                            {:type ::taker-queue-full}))
+            (and (read! (channel src)) nil))))
+      (offer-val [this val]
+        (if-let [taker (.poll takers)]
+          (dispatch/run (taker-fn taker val))
+          (when-not (.offer buffered val)
+            (throw (ex-info "cannot enqueue read-channel value"
+                            {:type ::buffered-queue-full}))))))))
