@@ -111,7 +111,7 @@
   ([{:keys [group channel ssl-ctx]} request-map handler]
    (when-not (:uri request-map)
      (throw (ex-info "malformed request-map, needs :uri key" {})))
-   (let [uri         (uri/parse (:uri request-map))
+   (let [uri         (uri/parse (:uri request-map) (:params request-map))
          ssl?        (:ssl? uri)
          port        (:port uri)
          host        (:host uri)
@@ -194,12 +194,13 @@
 (s/def ::user string?)
 (s/def ::password string?)
 (s/def ::auth (s/keys :req-un [::user ::password]))
+(s/def ::params (s/map-of (s/or :keyword keyword? :string string?) any?))
 
 ;; Bring everything together in our request map
 
 (s/def ::request (s/keys
                   :req-un [::uri]
-                  :opt-un [::request-method ::body ::version ::query ::auth]))
+                  :opt-un [::request-method ::body ::version ::query ::auth ::params]))
 
 ;;
 (s/def ::build-client-opts map?)

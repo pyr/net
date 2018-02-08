@@ -57,14 +57,16 @@
                                   "Invalid URI provided"))))
 
 (defn parse
-  [input]
-  (let [uri        (->uri input)
-        uri-port   (port uri)
-        uri-scheme (scheme uri)]
-    {:uri    uri
-     :host   (host uri)
-     :scheme uri-scheme
-     :port   (cond (some? uri-port)       uri-port
-                   (= "http" uri-scheme)  80
-                   (= "https" uri-scheme) 443)
-     :ssl?   (= "https" uri-scheme)}))
+  ([input params]
+   (let [uri        (encode (->uri input) params)
+         uri-port   (port uri)
+         uri-scheme (scheme uri)]
+     {:uri    uri
+      :host   (host uri)
+      :scheme uri-scheme
+      :port   (cond (some? uri-port)       uri-port
+                    (= "http" uri-scheme)  80
+                    (= "https" uri-scheme) 443)
+      :ssl?   (= "https" uri-scheme)}))
+  ([input]
+   (parse input {})))
