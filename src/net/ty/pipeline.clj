@@ -194,6 +194,13 @@
      (encode [ctx msg ^java.util.List out]
        (.add out (str msg "\r\n"))))))
 
+(defn ^ChannelHandler http-content-decompressor
+  ""
+  ([]
+   (HttpContentDecompressor.))
+  ([strict?]
+   (HttpContentDecompressor. (boolean strict?))))
+
 (defmacro defencoder
   "Define encoder"
   [sym [msg ctx shareable?] & body]
