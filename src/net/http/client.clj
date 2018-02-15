@@ -76,7 +76,7 @@
       (channelRead [^ChannelHandlerContext ctx msg]
         (if (instance? HttpResponse msg)
           (response-handler f ctx msg out)
-          (chunk/enqueue in ctx msg))))))
+          (chunk/enqueue in ctx msg true))))))
 
 (defn request-initializer
   "Our channel initializer."
@@ -87,6 +87,7 @@
            (cond-> (some? ssl-ctx)
              (p/add-last "ssl"   (ssl/new-handler ssl-ctx channel)))
            (p/add-last "codec"   (HttpClientCodec.))
+           (p/add-last "decompressor" (p/http-content-decompressor))
            (p/add-last "handler" (netty-handler handler transform)))))))
 
 (defn build-client

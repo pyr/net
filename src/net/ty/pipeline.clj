@@ -12,6 +12,7 @@
            io.netty.channel.ChannelPipeline
            io.netty.handler.timeout.ReadTimeoutException
            io.netty.handler.timeout.ReadTimeoutHandler
+           io.netty.handler.codec.http.HttpContentDecompressor
            io.netty.handler.codec.string.StringDecoder
            io.netty.handler.codec.string.StringEncoder
            io.netty.handler.codec.LineBasedFrameDecoder
@@ -193,6 +194,13 @@
        true)
      (encode [ctx msg ^java.util.List out]
        (.add out (str msg "\r\n"))))))
+
+(defn ^ChannelHandler http-content-decompressor
+  ""
+  ([]
+   (HttpContentDecompressor.))
+  ([strict?]
+   (HttpContentDecompressor. (boolean strict?))))
 
 (defmacro defencoder
   "Define encoder"
