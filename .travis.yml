@@ -1,9 +1,31 @@
+dist: trusty
 sudo: false
+
 language: clojure
-lein: lein
+
 jdk:
-  - openjdk7
-  - oraclejdk7
+- openjdk7
+- oraclejdk7
+- openjdk8
+- oraclejdk8
+
 branches:
   except:
-    - gh-pages
+  - gh-pages
+
+after_success:
+- |
+  test "${TRAVIS_PULL_REQUEST}" = "false" \
+  && test "${TRAVIS_BRANCH}" = "master" \
+  && test "${TRAVIS_JDK_VERSION}" = "openjdk8" \
+  && ( \
+    lein codox
+    cd docs
+    git init
+    git config user.name "TravisCI"
+    git config user.email "travis-ci@spootnik.org"
+    git add .
+    git commit -m "deploy to github pages"
+    git push -f -q "https://${GH_TOKEN}@github.com/${TRAVIS_REPO_SLUG}" master:gh-pages
+  ) \
+  || echo "Nothing to see here, move along."
