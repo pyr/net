@@ -158,7 +158,10 @@
       (exceptionCaught [^ChannelHandlerContext ctx e]
         (notify-bad-request! handler nil ctx (:chan @state) e))
       (channelInactive [^ChannelHandlerContext ctx]
-        (chan/close! (chan/channel ctx)))
+        (chan/close! (chan/channel ctx))
+        (when-let [ch (:chan @state)]
+          (a/close! ch)
+          (a/go (while (a/<! ch)))))
       (channelRead [^ChannelHandlerContext ctx msg]
         (cond
           (instance? HttpRequest msg)

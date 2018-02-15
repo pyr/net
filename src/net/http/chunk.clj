@@ -146,7 +146,7 @@
   [this ftr [^ChannelHandlerContext ctx ^Channel ch]]
   (if (or (nil? ftr) (f/complete? ftr))
     (a/take! ch (write-listener-callback this ctx))
-    (a/close! ch)))
+    (do (a/close! ch) (a/go (while (a/<! ch))))))
 
 (defn start-write-listener
   [ctx ch]
