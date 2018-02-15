@@ -32,10 +32,14 @@ Net now has full [API Documentation](http://pyr.github.io/net) and
 ## Installation
 
 ```clojure
-    [[spootnik/net "0.3.3-beta27"]]
+    [[spootnik/net "0.3.3-beta28"]]
 ```
 
 ## Changelog
+
+### 0.3.3-beta28
+
+- Ensure lost clients do not result in filled core.async channel buffers
 
 ### 0.3.3-beta27
 
