@@ -157,6 +157,8 @@
     (proxy [ChannelInboundHandlerAdapter] []
       (exceptionCaught [^ChannelHandlerContext ctx e]
         (notify-bad-request! handler nil ctx (:chan @state) e))
+      (channelInactive [^ChannelHandlerContext ctx]
+        (chan/close! (chan/channel ctx)))
       (channelRead [^ChannelHandlerContext ctx msg]
         (cond
           (instance? HttpRequest msg)
