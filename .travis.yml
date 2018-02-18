@@ -20,6 +20,7 @@ after_success:
     git init
     git config user.name "TravisCI"
     git config user.email "travis-ci@spootnik.org"
+    touch .nojekyll
     git add .
     git commit -m "deploy to github pages"
     git push -f -q "https://${GITHUB_TOKEN}@github.com/${TRAVIS_REPO_SLUG}" master:gh-pages
