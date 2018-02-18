@@ -26,5 +26,5 @@ after_success:
   ) \
   || echo "Nothing to see here, move along."
 env:
-  github-token:
+  global:
     secure: JCLQbzgIG4OF5uVs1A7DMRE0KBqoUZH6ogBtBaY85Bo7mpB5ISKgp8C8I+jGmGI/9m+iPvzYnFSEmQg7cUNfsAG4gmfKKDd+2LXpi8b24jF/iVmXagK7OtjlmxVTdHyapFebG+ruCpI8WvbIMzZjR1XFdlDhkleTqbBg3WqUlUROxif9ERX97o+tVslo7g5C6b6wZenlY/RuUhBK4iF91Fxc0E1CgSZi1JQE3OVCzcvMyamvQqqx2TnCjPSpyHcsw+Uu+fQyz/bi/dqpxHoFdi5mRcSHgD+0ZmPT4WjCRTav0YVoQsCz6AYgdBJ2LO+hGQQGzNMV/+LM+YcP7Ym6cVFXbI4hofN6N5EF06ooLm8c07tMjRo1WAupepWmkiOzPR1nwNZD7wx4ilJ3HUUpE250pc8RYsofINyVr1YM/fW7AbOUC7ddFYOq+9PjBGadqVmANlB7EbrzjyzXO2sJbd9Mf/v8BYllGWAUcWvfWFHtgvlpHRwnqW/KMqzg5He+4+tpDzh+plVTMG7xLKRLA87bez34jzeQFoYHC67TqFZAOID1m+PAbtwWxnEpzXsvJpCr4recjPtZLuwEqIfNj7nbjPTWv0X8vjIQhxh3n4FdEYKDzCcp3Yuu1ADB5EfPRM64nwHYLc/4BmIszJrGtNmCA4z1HjhVUw725/CrWe8=
