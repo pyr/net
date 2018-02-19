@@ -75,18 +75,18 @@
 
 (defn showbuf
   [b]
-  (let [b (or (unwrap b) b)]
+  (let [b (or (buf/unwrap b) b)]
     (cond
-      (and (composite? b) (pos? (refcount b)))
-      (vec (conj (for [s (components b)] (showbuf s))
+      (and (buf/composite? b) (pos? (buf/refcount b)))
+      (vec (conj (for [s (buf/components b)] (showbuf s))
                  :>
-                 (refcount b)))
+                 (buf/refcount b)))
 
-      (composite? b)
+      (buf/composite? b)
       :dead-composite
 
-      (pos? (refcount b))
-      (refcount b)
+      (pos? (buf/refcount b))
+      (buf/refcount b)
 
       :else
       :dead)))
