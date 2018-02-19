@@ -2,12 +2,12 @@
  "Utility functions to build fixed size buffers.
    These functions hold onto data and yield when
    a specific size has been reached."
- (:require [net.ty.coerce         :as co])
-  (:import io.netty.buffer.Unpooled
-           io.netty.buffer.CompositeByteBuf
-           io.netty.buffer.ByteBuf
-           io.netty.buffer.ByteBufHolder
-           java.nio.ByteBuffer))
+ (:require [net.ty.coerce :as co])
+ (:import io.netty.buffer.Unpooled
+          io.netty.buffer.CompositeByteBuf
+          io.netty.buffer.ByteBuf
+          io.netty.buffer.ByteBufHolder
+          java.nio.ByteBuffer))
 
 (defprotocol Bufferizable
   (as-buffer [this]))
@@ -318,24 +318,6 @@
                   (refcount (component buf i))
                   (catch Exception _)))))]
       (try (refcount buf) (catch Exception _)))))
-
-(defn showbuf
-  [b]
-  (let [b (or (unwrap b) b)]
-    (cond
-      (and (composite? b) (pos? (refcount b)))
-      (vec (conj (for [s (components b)] (showbuf s))
-                 :>
-                 (refcount b)))
-
-      (composite? b)
-      :dead-composite
-
-      (pos? (refcount b))
-      (refcount b)
-
-      :else
-      :dead)))
 
 (defn ^Exception wrong-byte-arg
   "Build an illegal argument exception"

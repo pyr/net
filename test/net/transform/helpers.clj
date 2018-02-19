@@ -73,8 +73,26 @@
             (recur s (inc zeroes))
             (recur (str s c) zeroes))))))
 
+(defn showbuf
+  [b]
+  (let [b (or (unwrap b) b)]
+    (cond
+      (and (composite? b) (pos? (refcount b)))
+      (vec (conj (for [s (components b)] (showbuf s))
+                 :>
+                 (refcount b)))
+
+      (composite? b)
+      :dead-composite
+
+      (pos? (refcount b))
+      (refcount b)
+
+      :else
+      :dead)))
+
 (def leaking-buffer-xf
-  (comp (map #(when (pos? (buf/refcount %)) (buf/showbuf %)))
+  (comp (map #(when (pos? (buf/refcount %)) (showbuf %)))
         (map-indexed vector)
         (remove (comp nil? second))))
 
