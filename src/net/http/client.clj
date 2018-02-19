@@ -73,6 +73,8 @@
     (proxy [ChannelInboundHandlerAdapter] []
       (exceptionCaught [^ChannelHandlerContext ctx e]
         (f {:status 5555 :error e}))
+      (channelInactive [^ChannelHandlerContext ctx]
+        (a/close! in))
       (channelRead [^ChannelHandlerContext ctx msg]
         (if (instance? HttpResponse msg)
           (response-handler f ctx msg out)

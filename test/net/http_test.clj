@@ -13,36 +13,56 @@
     (.close sock)
     port))
 
-(defn echo-handler
-  [request]
-  {:status  200
-   :headers {:connection "close"}
-   :body    (a/pipe (:body request) (a/chan 10))})
-
-(defn mktxt
-  [i]
-  (reduce str "" (repeat i "foobar")))
-
-(defn req
-  [port payload]
-  (let [resp (client/request {:uri       (str "http://localhost:" port)
-                              :headers   {:content-length (count payload)}
-                              :body      (buf/wrapped-string payload)
-                              :transform st/transform})]
-    (assoc resp :body (a/<!! (:body resp)))))
-
-
 (def success-response
-  {:status 200
+  {:status  200
+   :version "HTTP/1.1"
+   :body    ""
    :headers {:connection "close"}})
 
 (def success-handler
   (constantly success-response))
 
+(defn echo-handler
+  [{:keys [body headers] :as request}]
+  (assoc success-response
+         :body    body
+         :headers {:connection     "close"
+                   :content-length (:content-length headers)}))
+
+(defn req
+  [payload]
+  (let [{:keys [body] :as resp} (client/request payload)]
+    (cond-> resp (some? body) (assoc :body (a/<!! body)))))
+
 (deftest success-server
   (let [port   (get-port)
-        server (server/run-server {:port port} success-handler)
-        client (client/build-client {})]
-    (testing "referential transparency"
-      (= (client/request {:request-method :get :uri (str "http://localhost:" port)})
-         success-response))))
+        server (server/run-server {:port port} success-handler)]
+    (try
+      (testing "referential transparency"
+        (is
+         (= (req {:request-method :get
+                  :uri            (str "http://localhost:" port)
+                  :transform      st/transform})
+            success-response)))
+      (finally (server)))))
+
+(deftest echo-server
+  (let [port   (get-port)
+        input  (a/to-chan (mapv buf/wrapped-string ["foo" "bar" "baz"]))
+        server (server/run-server {:port port} echo-handler)
+        len    "9"]
+    (try
+      (testing "echoing works"
+        (is
+         (= (req {:request-method :get
+                  :uri            (str "http://localhost:" port)
+                  :headers        {:transfer-encoding "chunked"
+                                   :content-length    len}
+                  :transform      st/transform
+                  :body           input})
+            (assoc success-response
+                   :body "foobarbaz"
+                   :headers {:connection     "close"
+                             :content-length "9"}))))
+      (finally
+        (server)))))
