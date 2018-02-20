@@ -12,14 +12,14 @@
     (doseq [p parts]
       (augment-composite cb (wrapped-string p)))
     (is (composite? cb))
-    (is (= "foobar" (to-string cb)))))
+    (is (= "foobar" (to-string cb true)))))
 
 
 (deftest wrapped-bufer
   (let [parts ["foo" "bar"]
         cb    (merge-bufs (mapv wrapped-string parts))]
     (is (composite? cb))
-    (is (= "foobar" (to-string cb)))))
+    (is (= "foobar" (to-string cb true)))))
 
 (deftest wrapped-string-retention
   (let [b (wrapped-string "foo")]
@@ -87,7 +87,8 @@
     (is (two? (refcount cb)))
     (release-all cb)
     (is (every? one? (map refcount parts)))
-    (is (one? (refcount cb)))))
+    (is (one? (refcount cb)))
+    (release cb)))
 
 
 ;; Same tests, but on direct buffers
@@ -103,14 +104,14 @@
     (doseq [p parts]
       (augment-composite cb (direct-wrapped-string p)))
     (is (composite? cb))
-    (is (= "foobar" (to-string cb)))))
+    (is (= "foobar" (to-string cb true)))))
 
 
 (deftest direct-wrapped-bufer
   (let [parts ["foo" "bar"]
         cb    (merge-bufs (mapv direct-wrapped-string parts))]
     (is (composite? cb))
-    (is (= "foobar" (to-string cb)))))
+    (is (= "foobar" (to-string cb true)))))
 
 (deftest direct-wrapped-string-retention
   (let [b (direct-wrapped-string "foo")]
@@ -178,7 +179,8 @@
     (is (two? (refcount cb)))
     (release-all cb)
     (is (every? one? (map refcount parts)))
-    (is (one? (refcount cb)))))
+    (is (one? (refcount cb)))
+    (release cb)))
 
 ;; Composite buffer behavior
 
@@ -190,7 +192,8 @@
     (is (= (set parts) (set (iterator-seq (component-iterator cb)))))
     (is (composite? cb))
     (is (not (composite? (slice cb))))
-    (is (= cb (unwrap (slice (slice (slice cb))))))))
+    (is (= cb (unwrap (slice (slice (slice cb))))))
+    (release cb)))
 
 (deftest composite-reassembly
   (let [p1 (mapv direct-wrapped-string ["f" "o" "o"])
@@ -205,7 +208,10 @@
       (augment-composite c2 p))
     (doseq [p [c1 c2]]
       (augment-composite c3 p))
-    (is (= [c1 c2] (vec (components c3))))))
+    (is (= [c1 c2] (vec (components c3))))
+    (is (= "foobar" (to-string c3 true)))
+    (is (every? zero? (map refcount p1)))
+    (is (every? zero? (map refcount p2)))))
 
 ;;
 ;; Asynchronous buffers

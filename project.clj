@@ -1,4 +1,4 @@
-(defproject spootnik/net "0.3.3-beta32"
+(defproject spootnik/net "0.3.3-beta33-SNAPSHOT"
   :description "A clojure netty companion"
   :url "https://github.com/pyr/net"
   :license {:name "MIT License"
@@ -20,7 +20,8 @@
                    :dependencies   [[org.slf4j/slf4j-api        "1.7.25"]
                                     [org.slf4j/slf4j-log4j12    "1.7.25"]
                                     [org.clojure/tools.logging  "0.4.0"]
-                                    [com.stuartsierra/component "0.3.2"]]}}
+                                    [com.stuartsierra/component "0.3.2"]]
+                   :jvm-opts       ["-Dio.netty.leakDetection.level=paranoid"]}}
   :dependencies [[org.clojure/clojure                      "1.9.0"]
                  [org.clojure/core.async                   "0.4.474"]
                  [io.netty/netty-all                       "4.1.21.Final"]

@@ -142,12 +142,18 @@
 ;;
 ;; When called with an actual future, apply the same logic, re-using the listener
 ;; up to the point where no more chunks have to be sent out or an error occurs.
-(f/deflistener write-listener
-  [this ftr [^ChannelHandlerContext ctx ^Channel ch]]
-  (if (or (nil? ftr) (f/complete? ftr))
-    (a/take! ch (write-listener-callback this ctx))
-    (do (a/close! ch) (a/go (while (a/<! ch))))))
+(comment
+  (f/deflistener write-listener
+    [this ftr [^ChannelHandlerContext ctx ^Channel ch]]
+    (if (or (nil? ftr) (f/complete? ftr))
+      (a/take! ch (write-listener-callback this ctx))
+      (do (a/close! ch) (a/go (while (a/<! ch)))))))
 
 (defn start-write-listener
-  [ctx ch]
-  (f/operation-complete (write-listener ctx ch)))
+  [^ChannelHandlerContext ctx ^Channel ch]
+  (f/operation-complete
+   (f/listen-with
+    (fn [listener ftr]
+      (if (or (nil? ftr) (f/complete? ftr))
+        (a/take! ch (write-listener-callback listener ctx))
+        (do (a/close! ch) (a/go (while (a/<! ch)))))))))

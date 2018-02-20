@@ -152,9 +152,6 @@
   "Build a handler function to be used in netty pipelines out of an SSL context.
    Will yield a 1-arity function of a context and a 3-arity function of a
    context, a host, and a port which will add a handler to the context."
-  ([^SslContext ctx host port]
-   (fn ^ChannelHandler make-handler []
-     (new-handler ctx *channel* host port)))
-  ([^SslContext ctx]
-   (fn ^ChannelHandler make-handler []
-     (new-handler ctx *channel*))))
+  [^SslContext ctx]
+  (fn ^ChannelHandler make-handler []
+    (new-handler ctx *channel*)))

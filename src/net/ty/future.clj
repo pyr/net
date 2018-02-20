@@ -45,15 +45,19 @@
   ([^ChannelFutureListener listener future]
    (.operationComplete listener future)))
 
+(defn listen-with
+  [f]
+  (reify
+    io.netty.channel.ChannelFutureListener
+    (operationComplete [this ftr]
+      (f this ftr))))
+
 (defmacro deflistener
   "Define a channel future listener"
   [sym [listener ftr bindings] & body]
   `(defn ~sym
      ~bindings
-     (reify
-       io.netty.channel.ChannelFutureListener
-       (operationComplete [~listener ^ChannelFuture ~ftr]
-         (do ~@body)))))
+     (listen-with (fn [~listener ~ftr] (do ~@body)))))
 
 (defn sync!
   "Synchronize future"

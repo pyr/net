@@ -42,7 +42,7 @@
   ([^URI uri ^String default]
    (or (scheme uri) default)))
 
-(defn ^int port
+(defn port
   [^URI uri]
   (let [p (.getPort uri)]
     (when-not (= p -1)
