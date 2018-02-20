@@ -37,6 +37,12 @@ Net now has full [API Documentation](http://pyr.github.io/net) and
 
 ## Changelog
 
+### 0.3.3-beta32
+
+- Reliability fixes in HTTP client
+- Allow disabling of SSL certificate validation
+- Allow more options to be supplied to the HTTP server
+
 ### 0.3.3-beta28
 
 - Ensure lost clients do not result in filled core.async channel buffers
