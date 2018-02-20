@@ -12,8 +12,6 @@ branches:
 after_success:
 - |
   test "${TRAVIS_TAG}" \
-  && test "${TRAVIS_PULL_REQUEST}" = "false" \
-  && test "${TRAVIS_BRANCH}" = "master" \
   && test "${TRAVIS_JDK_VERSION}" = "openjdk8" \
   && ( \
     lein codox

@@ -267,7 +267,7 @@
     :port                    <port>
     :chunk-size              <chunk-size>
     :inbuf                   <input-channel-buffer>
-    :so-backlog              <backlog>
+    :bootstrap               <config as understood by net.ty.boostrap/server-bootstrap>
     :executor                <ExecutorService used to run/generate sync responses>}
    ```
 
@@ -280,7 +280,8 @@
    (let [boss-group  (http/make-boss-group options)
          [host port] (get-host-port options)]
      (try
-       (let [bootstrap (bs/server-bootstrap {:config  {:so-backlog 256}
+       (let [bootstrap (bs/server-bootstrap {:config  (merge {:so-backlog 256 :so-reuseaddr true}
+                                                             (:bootstrap options))
                                              :group   boss-group
                                              :channel (if (or (:disable-epoll? options)
                                                               (not (http/epoll?)))
@@ -304,7 +305,7 @@
 (s/def ::port (s/int-in 1 65536))
 (s/def ::chunk-size pos-int?)
 (s/def ::input-channel-buffer pos-int?)
-(s/def ::so-backlog pos-int?)
 (s/def ::executor executor?)
+(s/def ::bootstrap ::bs/server-bootstrap-schema)
 
 (s/def ::options map?)

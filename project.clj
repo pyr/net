@@ -1,4 +1,4 @@
-(defproject spootnik/net "0.3.3-beta30"
+(defproject spootnik/net "0.3.3-beta31"
   :description "A clojure netty companion"
   :url "https://github.com/pyr/net"
   :license {:name "MIT License"
