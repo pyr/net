@@ -66,3 +66,10 @@
                              :content-length "9"}))))
       (finally
         (server)))))
+
+(deftest error-tests
+  (is (thrown-with-msg?
+       IllegalArgumentException
+       #"SSL was required but no SSL context is present"
+       (client/request nil {:request-method :get
+                            :uri "https://foo.example.com"}))))

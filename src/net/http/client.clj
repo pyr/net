@@ -82,11 +82,14 @@
 
 (defn request-initializer
   "Our channel initializer."
-  ([ssl-ctx handler transform]
+  ([ssl? ssl-ctx handler transform]
+   (when (and ssl? (nil? ssl-ctx))
+     (throw (IllegalArgumentException.
+             "SSL was required but no SSL context is present")))
    (proxy [ChannelInitializer] []
      (initChannel [^Channel channel]
        (-> (chan/pipeline channel)
-           (cond-> (some? ssl-ctx)
+           (cond-> ssl?
              (p/add-last "ssl"   (ssl/new-handler ssl-ctx channel)))
            (p/add-last "codec"   (HttpClientCodec.))
            (p/add-last "handler" (netty-handler handler transform)))))))
@@ -118,7 +121,7 @@
          port        (:port uri)
          host        (:host uri)
          transform   (:transform request-map)
-         initializer (request-initializer (when ssl? ssl-ctx) handler transform)
+         initializer (request-initializer ssl? ssl-ctx handler transform)
          bs          (bs/bootstrap {:group   group
                                     :channel channel
                                     :handler initializer})
