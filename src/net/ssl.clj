@@ -15,7 +15,8 @@
            io.netty.channel.Channel
            io.netty.handler.ssl.SslContext
            io.netty.handler.ssl.SslContextBuilder
-           io.netty.handler.ssl.ClientAuth))
+           io.netty.handler.ssl.ClientAuth
+           io.netty.handler.ssl.util.InsecureTrustManagerFactory))
 
 (def ^:dynamic *storage*
   "Help net decide how to treat input. The default value
@@ -85,9 +86,10 @@
 
 (defn client-context
   "Build an SSL client context for netty"
-  [{:keys [bundle password cert pkey authority storage]}]
+  [{:keys [bundle password cert pkey authority storage insecure]}]
   (let [storage (or storage :guess)
         builder (SslContextBuilder/forClient)]
+    (.sslProvider builder io.netty.handler.ssl.SslProvider/OPENSSL)
     (binding [*storage* storage]
       (when (and cert pkey authority)
         (let [cert-fact (CertificateFactory/getInstance "X.509")
@@ -98,6 +100,8 @@
                 chain     ^"[Ljava.security.cert.X509Certificate;" (into-array X509Certificate [cert authority])]
             (.keyManager builder ^PrivateKey pkey chain)
             (.trustManager builder chain))))
+      (when insecure
+        (.trustManager builder InsecureTrustManagerFactory/INSTANCE))
       (when (and bundle password)
         (let [keystore (KeyStore/getInstance "pkcs12")]
           (with-open [stream (input-stream bundle)]
