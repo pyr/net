@@ -134,10 +134,10 @@
             [k (if (= 1 (count vs)) (first vs) vs)])))
    (.parameters dx)))
 
-(defn qs->body-params
-  "Extract body parameters from a body when application"
-  [payload]
-  (->params (QueryStringDecoder. payload false)))
+(defn qs->params
+  "Extract parameters from a x-www-form-urlencoded string"
+  [qs]
+  (->params (QueryStringDecoder. qs false)))
 
 (defn ->request
   "Create a request map from a Netty Http Request"
