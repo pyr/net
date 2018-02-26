@@ -136,21 +136,8 @@
 
 (defn qs->body-params
   "Extract body parameters from a body when application"
-  [{:keys [headers body]}]
-  (when-let [content-type (:content-type headers)]
-    (when (str/starts-with? content-type "application/x-www-form-urlencoded")
-      (->params
-       (QueryStringDecoder. (buf/to-string body) false)))))
-
-(defn assoc-body-params
-  "Add found query and body parameters (when applicable) to a request map"
-  [request]
-  (let [bp (qs->body-params request)]
-    (when-let [body (:body request)]
-      (buf/release body))
-    (cond-> request
-      bp (assoc :body-params bp)
-      bp (update :params merge bp))))
+  [payload]
+  (->params (QueryStringDecoder. payload false)))
 
 (defn ->request
   "Create a request map from a Netty Http Request"
