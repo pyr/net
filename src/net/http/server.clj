@@ -18,6 +18,7 @@
             [net.http              :as http]
             [net.http.chunk        :as chunk]
             [net.core.concurrent   :as nc]
+            [net.core.async        :refer [drain]]
             [clojure.core.async    :as a]
             [clojure.spec.alpha    :as s]
             [clojure.string        :as str]
@@ -161,7 +162,7 @@
         (chan/close! (chan/channel ctx))
         (when-let [ch (:chan @state)]
           (a/close! ch)
-          (a/go (while (a/<! ch)))))
+          (drain ch buf/ensure-released)))
       (channelRead [^ChannelHandlerContext ctx msg]
         (cond
           (instance? HttpRequest msg)

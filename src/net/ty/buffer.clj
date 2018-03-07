@@ -102,6 +102,9 @@
   [^ByteBuf buf]
   (.release buf))
 
+(defn ensure-released [buf]
+  (while (and (pos? (refcount buf)) (release buf))))
+
 (defn touch
   [^ByteBuf buf]
   (.touch buf))

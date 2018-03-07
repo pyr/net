@@ -14,6 +14,14 @@
       (compare-and-set! status ::sending ::sent) nil
       (compare-and-set! status ::paused ::sent)  (backpressure! false))))
 
+(defn drain [chan & [f]]
+  (loop []
+    (let [v (a/poll! chan)]
+      (when (some? v)
+        (when f
+          (f v))
+        (recur)))))
+
 (defn put!
   "Takes a `ch`, a `msg`, a single arg function that when passed
    `true` enables backpressure and when passed `false` disables it,
