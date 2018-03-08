@@ -14,13 +14,16 @@
       (compare-and-set! status ::sending ::sent) nil
       (compare-and-set! status ::paused ::sent)  (backpressure! false))))
 
-(defn drain [chan & [f]]
-  (loop []
-    (let [v (a/poll! chan)]
-      (when (some? v)
-        (when f
-          (f v))
-        (recur)))))
+(defn drain
+  ([chan f]
+   (loop []
+     (let [v (a/poll! chan)]
+       (when (some? v)
+         (when f
+           (f v))
+         (recur)))))
+  ([chan]
+   (drain chan nil)))
 
 (defn put!
   "Takes a `ch`, a `msg`, a single arg function that when passed
