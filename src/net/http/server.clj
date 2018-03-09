@@ -139,7 +139,8 @@
     (buf/release msg))
   (chan/close-future (chan/channel ctx))
   (when (some? ch)
-    (a/close! ch))
+    (a/close! ch)
+    (drain ch buf/ensure-released))
   (handler {:type           :error
             :error          (if (string? e)
                               (IllegalArgumentException. ^String e)
