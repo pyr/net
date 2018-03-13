@@ -4,7 +4,7 @@
             [net.http           :as http]
             [net.ty.future      :as f]
             [clojure.core.async :as a]
-            [net.core.async     :refer [put!]])
+            [net.core.async     :refer [put! drain]])
   (:import io.netty.buffer.Unpooled
            io.netty.buffer.ByteBuf
            io.netty.channel.ChannelHandlerContext
@@ -147,7 +147,7 @@
     [this ftr [^ChannelHandlerContext ctx ^Channel ch]]
     (if (or (nil? ftr) (f/complete? ftr))
       (a/take! ch (write-listener-callback this ctx))
-      (do (a/close! ch) (a/go (while (a/<! ch)))))))
+      (do (a/close! ch) (drain ch buf/ensure-released)))))
 
 (defn start-write-listener
   [^ChannelHandlerContext ctx ^Channel ch]
@@ -156,4 +156,4 @@
     (fn [listener ftr]
       (if (or (nil? ftr) (f/complete? ftr))
         (a/take! ch (write-listener-callback listener ctx))
-        (do (a/close! ch) (a/go (while (a/<! ch)))))))))
+        (do (a/close! ch) (drain ch buf/ensure-released)))))))
