@@ -32,10 +32,14 @@ Net now has full [API Documentation](http://pyr.github.io/net) and
 ## Installation
 
 ```clojure
-    [[spootnik/net "0.3.3-beta33"]]
+    [[spootnik/net "0.3.3-beta34"]]
 ```
 
 ## Changelog
+
+### 0.3.3-beta34
+
+- Add draining facilities for unexpectedly closed channels
 
 ### 0.3.3-beta32
 
