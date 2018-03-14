@@ -25,6 +25,10 @@
   ([chan]
    (drain chan nil)))
 
+(defn close-draining [chan f]
+  (a/close! chan)
+  (drain chan f))
+
 (defn put!
   "Takes a `ch`, a `msg`, a single arg function that when passed
    `true` enables backpressure and when passed `false` disables it,

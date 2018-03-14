@@ -18,7 +18,7 @@
             [net.http              :as http]
             [net.http.chunk        :as chunk]
             [net.core.concurrent   :as nc]
-            [net.core.async        :refer [drain]]
+            [net.core.async        :refer [close-draining]]
             [clojure.core.async    :as a]
             [clojure.spec.alpha    :as s]
             [clojure.string        :as str]
@@ -139,8 +139,7 @@
     (buf/release msg))
   (chan/close-future (chan/channel ctx))
   (when (some? ch)
-    (a/close! ch)
-    (drain ch buf/ensure-released))
+    (close-draining ch buf/ensure-released))
   (handler {:type           :error
             :error          (if (string? e)
                               (IllegalArgumentException. ^String e)
@@ -162,8 +161,7 @@
       (channelInactive [^ChannelHandlerContext ctx]
         (chan/close! (chan/channel ctx))
         (when-let [ch (:chan @state)]
-          (a/close! ch)
-          (drain ch buf/ensure-released)))
+          (close-draining ch buf/ensure-released)))
       (channelRead [^ChannelHandlerContext ctx msg]
         (cond
           (instance? HttpRequest msg)
