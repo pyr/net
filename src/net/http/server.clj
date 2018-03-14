@@ -139,7 +139,7 @@
     (buf/release msg))
   (chan/close-future (chan/channel ctx))
   (when (some? ch)
-    (close-draining ch buf/ensure-released))
+    (a/close! ch))
   (handler {:type           :error
             :error          (if (string? e)
                               (IllegalArgumentException. ^String e)
@@ -157,7 +157,10 @@
         state (volatile! {})]
     (proxy [ChannelInboundHandlerAdapter] []
       (exceptionCaught [^ChannelHandlerContext ctx e]
-        (notify-bad-request! handler nil ctx (:chan @state) e))
+        (let [ch (:chan @state)]
+          (notify-bad-request! handler nil ctx ch e)
+          (when ch
+            (close-draining ch buf/ensure-released))))
       (channelInactive [^ChannelHandlerContext ctx]
         (chan/close! (chan/channel ctx))
         (when-let [ch (:chan @state)]
