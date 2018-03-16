@@ -129,7 +129,10 @@
                 http/last-http-content)]
       (f/add-listener (chan/write-and-flush! ctx msg)
                       (if (some? msg)
-                        listener
+                        (f/listen-with
+                         (fn [_ ftr]
+                           (buf/ensure-released msg)
+                           (.operationComplete listener ftr)))
                         chan/close-future)))))
 
 ;; A Netty ChannelFutureListener used when writing in chunks
