@@ -37,6 +37,10 @@ Net now has full [API Documentation](http://pyr.github.io/net) and
 
 ## Changelog
 
+### 0.3.3-beta36
+
+- Support SNI for TLS requests
+
 ### 0.3.3-beta34
 
 - Add draining facilities for unexpectedly closed channels
