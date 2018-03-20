@@ -145,8 +145,10 @@
 
 (defn ^ChannelHandler new-handler
   "Create a new SSL handler from an SslContext"
-  [^SslContext ctx ^Channel channel]
-  (.newHandler ctx (.alloc channel)))
+  ([^SslContext ctx ^Channel channel]
+   (.newHandler ctx (.alloc channel)))
+  ([^SslContext ctx ^Channel channel ^String host port]
+   (.newHandler ctx (.alloc channel) host (int port))))
 
 (defn ^clojure.lang.IFn handler-fn
   "Build a handler function to be used in netty pipelines out of an SSL context.

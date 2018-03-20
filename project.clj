@@ -1,4 +1,4 @@
-(defproject spootnik/net "0.3.3-beta35"
+(defproject spootnik/net "0.3.3-beta36"
   :description "A clojure netty companion"
   :url "https://github.com/pyr/net"
   :license {:name "MIT License"
@@ -24,7 +24,7 @@
                    :jvm-opts       ["-Dio.netty.leakDetection.level=paranoid"]}}
   :dependencies [[org.clojure/clojure                      "1.9.0"]
                  [org.clojure/core.async                   "0.4.474"]
-                 [io.netty/netty-all                       "4.1.21.Final"]
+                 [io.netty/netty-all                       "4.1.22.Final"]
                  [io.netty/netty-tcnative                  "2.0.7.Final"]
                  [io.netty/netty-tcnative-boringssl-static "2.0.7.Final"]]
   :global-vars {*warn-on-reflection* true})
