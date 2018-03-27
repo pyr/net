@@ -78,7 +78,7 @@
       (channelRead [^ChannelHandlerContext ctx msg]
         (if (instance? HttpResponse msg)
           (response-handler f ctx msg out)
-          (chunk/enqueue in ctx msg))))))
+          (chunk/enqueue in ctx msg true))))))
 
 (defn request-initializer
   "Our channel initializer."
@@ -131,7 +131,8 @@
      (f/with-result [ftr (chan/write-and-flush! chan req)]
        (if (instance? Channel body)
          (chunk/start-write-listener chan body)
-         (chan/write-and-flush! chan body))))))
+         (chan/write-and-flush! chan body)))
+     chan)))
 
 (defn request
   "Execute a request against an asynchronous client. If no client exists, create one.
@@ -148,7 +149,7 @@
    a promise channel."
   ([client request-map ch]
    (try
-     (async-request request-map #(a/put! ch (or % ::no-output)))
+     (async-request client request-map #(a/put! ch (or % ::no-output)))
      (catch Throwable t
        (a/put! ch t)))
    ch)

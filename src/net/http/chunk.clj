@@ -105,11 +105,15 @@
     (-> ctx chan/channel chan/close-future)))
 
 (defn enqueue
-  [sink ctx msg]
-  (put! sink (buf/as-buffer msg) (backpressure-fn ctx) (close-fn msg ctx))
-  (when (http/last-http-content? msg)
-    (-> ctx chan/channel chan/close-future)
-    (a/close! sink)))
+  ([sink ctx msg]
+   (enqueue sink ctx msg false))
+  ([sink ctx msg close?]
+   (put! sink (buf/as-buffer msg) (backpressure-fn ctx) (close-fn msg ctx))
+   (when (http/last-http-content? msg)
+     (if close?
+       (-> ctx chan/channel chan/close!)
+       (-> ctx chan/channel chan/close-future))
+     (a/close! sink))))
 
 (defn prepare-body
   [x]

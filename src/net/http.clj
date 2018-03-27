@@ -137,7 +137,7 @@
 (defn qs->params
   "Extract parameters from a x-www-form-urlencoded string"
   [qs]
-  (->params (QueryStringDecoder. qs false)))
+  (->params (QueryStringDecoder. ^String qs false)))
 
 (defn ->request
   "Create a request map from a Netty Http Request"
