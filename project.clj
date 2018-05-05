@@ -24,7 +24,7 @@
                    :jvm-opts       ["-Dio.netty.leakDetection.level=paranoid"]}}
   :dependencies [[org.clojure/clojure                      "1.9.0"]
                  [org.clojure/core.async                   "0.4.474"]
-                 [io.netty/netty-all                       "4.1.22.Final"]
-                 [io.netty/netty-tcnative                  "2.0.7.Final"]
-                 [io.netty/netty-tcnative-boringssl-static "2.0.7.Final"]]
+                 [io.netty/netty-all                       "4.1.24.Final"]
+                 [io.netty/netty-tcnative                  "2.0.8.Final"]
+                 [io.netty/netty-tcnative-boringssl-static "2.0.8.Final"]]
   :global-vars {*warn-on-reflection* true})
