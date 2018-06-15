@@ -21,49 +21,18 @@
             [net.core.async        :refer [close-draining]]
             [clojure.core.async    :as a]
             [clojure.spec.alpha    :as s]
-            [clojure.string        :as str]
             [net.core.async        :refer [put!]])
   (:import io.netty.channel.ChannelHandlerContext
-           io.netty.channel.ChannelHandlerAdapter
            io.netty.channel.ChannelInboundHandlerAdapter
-           io.netty.channel.ChannelOutboundHandlerAdapter
            io.netty.channel.ChannelHandler
            io.netty.channel.ChannelOption
            io.netty.channel.ChannelInitializer
-           io.netty.channel.ChannelFutureListener
-           io.netty.channel.nio.NioEventLoopGroup
-           io.netty.channel.socket.nio.NioServerSocketChannel
-           io.netty.handler.logging.LoggingHandler
-           io.netty.handler.logging.LogLevel
-           io.netty.handler.codec.http.FullHttpRequest
            io.netty.handler.codec.http.HttpServerCodec
-           io.netty.handler.codec.http.HttpMethod
-           io.netty.handler.codec.http.HttpHeaders
-           io.netty.handler.codec.http.HttpResponseStatus
            io.netty.handler.codec.http.HttpUtil
-           io.netty.handler.codec.http.DefaultHttpResponse
-           io.netty.handler.codec.http.DefaultHttpContent
-           io.netty.handler.codec.http.DefaultLastHttpContent
-           io.netty.handler.codec.http.DefaultFullHttpResponse
            io.netty.handler.codec.http.HttpRequest
-           io.netty.handler.codec.http.HttpContent
-           io.netty.handler.codec.http.LastHttpContent
-           io.netty.handler.codec.http.HttpVersion
-           io.netty.handler.codec.http.HttpObjectAggregator
-           io.netty.handler.codec.http.HttpObject
-           io.netty.handler.codec.http.QueryStringDecoder
+           io.netty.handler.timeout.ReadTimeoutHandler
+           io.netty.handler.timeout.ReadTimeoutException
            io.netty.bootstrap.AbstractBootstrap
-           io.netty.bootstrap.ServerBootstrap
-           io.netty.buffer.Unpooled
-           io.netty.buffer.ByteBuf
-           io.netty.channel.ChannelPipeline
-           io.netty.buffer.ByteBufAllocator
-           io.netty.buffer.UnpooledByteBufAllocator
-           java.io.InputStream
-           java.io.File
-           java.io.FileInputStream
-           java.nio.charset.Charset
-           java.nio.ByteBuffer
            clojure.core.async.impl.protocols.Channel))
 
 (def default-chunk-size "" (* 1024 1024))
@@ -140,12 +109,13 @@
   (chan/close-future (chan/channel ctx))
   (when (some? ch)
     (a/close! ch))
-  (handler {:type           :error
-            :error          (if (string? e)
-                              (IllegalArgumentException. ^String e)
-                              e)
-            :request-method :error
-            :ctx            ctx}))
+  (when-not (instance? ReadTimeoutException e)
+    (handler {:type           :error
+              :error          (if (string? e)
+                                (IllegalArgumentException. ^String e)
+                                e)
+              :request-method :error
+              :ctx            ctx})))
 
 (defn ^ChannelHandler netty-handler
   "This is a stateful, per HTTP session adapter which wraps the user
@@ -197,7 +167,7 @@
 (defn initializer
   "An initializer is a per-connection context creator.
    For each incoming connections, the HTTP server codec is used."
-  [{:keys [chunk-size ring-handler]
+  [{:keys [chunk-size ring-handler read-timeout]
     :or   {chunk-size default-chunk-size}
     :as   opts}]
   (proxy [ChannelInitializer] []
@@ -206,6 +176,9 @@
             codec        (HttpServerCodec. 4096 8192 (int chunk-size))
             handler      (netty-handler ring-handler handler-opts)
             pipeline     (.pipeline ^io.netty.channel.Channel channel)]
+        (when read-timeout
+          (.addLast pipeline "read-timeout" (ReadTimeoutHandler. read-timeout)))
+
         (.addLast pipeline "codec"      codec)
         (.addLast pipeline "handler"    handler)))))
 
