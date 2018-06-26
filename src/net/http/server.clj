@@ -18,7 +18,7 @@
             [net.http              :as http]
             [net.http.chunk        :as chunk]
             [net.core.concurrent   :as nc]
-            [net.core.async        :refer [close-draining]]
+            [net.core.async        :as na]
             [clojure.core.async    :as a]
             [clojure.spec.alpha    :as s]
             [net.core.async        :refer [put!]])
@@ -30,8 +30,8 @@
            io.netty.handler.codec.http.HttpServerCodec
            io.netty.handler.codec.http.HttpUtil
            io.netty.handler.codec.http.HttpRequest
-           io.netty.handler.timeout.ReadTimeoutHandler
-           io.netty.handler.timeout.ReadTimeoutException
+           io.netty.handler.timeout.IdleStateHandler
+           io.netty.handler.timeout.IdleStateEvent
            io.netty.bootstrap.AbstractBootstrap
            clojure.core.async.impl.protocols.Channel))
 
@@ -102,20 +102,24 @@
   [request]
   (= bad-request (select-keys request request-data-keys)))
 
+(defn close-channel [ctx ch draining]
+  (chan/close-future (chan/channel ctx))
+  (when (some? ch)
+    (if draining
+      (na/close-draining ch buf/ensure-released)
+      (a/close! ch))))
+
 (defn notify-bad-request!
   [handler msg ctx ch e]
   (when (some? msg)
     (buf/release msg))
-  (chan/close-future (chan/channel ctx))
-  (when (some? ch)
-    (a/close! ch))
-  (when-not (instance? ReadTimeoutException e)
-    (handler {:type           :error
-              :error          (if (string? e)
-                                (IllegalArgumentException. ^String e)
-                                e)
-              :request-method :error
-              :ctx            ctx})))
+  (close-channel ctx ch false)
+  (handler {:type           :error
+            :error          (if (string? e)
+                              (IllegalArgumentException. ^String e)
+                              e)
+            :request-method :error
+            :ctx            ctx}))
 
 (defn ^ChannelHandler netty-handler
   "This is a stateful, per HTTP session adapter which wraps the user
@@ -126,15 +130,16 @@
   (let [inbuf (or inbuf default-inbuf)
         state (volatile! {})]
     (proxy [ChannelInboundHandlerAdapter] []
+      (userEventTriggered [^ChannelHandlerContext ctx ev]
+        (if (instance? IdleStateEvent ev)
+          (close-channel ctx (:chan @state) true)
+          (.fireUserEventTriggered ctx ev)))
       (exceptionCaught [^ChannelHandlerContext ctx e]
         (let [ch (:chan @state)]
           (notify-bad-request! handler nil ctx ch e)
-          (when ch
-            (close-draining ch buf/ensure-released))))
+          (close-channel ctx ch true)))
       (channelInactive [^ChannelHandlerContext ctx]
-        (chan/close! (chan/channel ctx))
-        (when-let [ch (:chan @state)]
-          (close-draining ch buf/ensure-released)))
+        (close-channel ctx (:chan @state) true))
       (channelRead [^ChannelHandlerContext ctx msg]
         (cond
           (instance? HttpRequest msg)
@@ -167,7 +172,7 @@
 (defn initializer
   "An initializer is a per-connection context creator.
    For each incoming connections, the HTTP server codec is used."
-  [{:keys [chunk-size ring-handler read-timeout]
+  [{:keys [chunk-size ring-handler idle-timeout]
     :or   {chunk-size default-chunk-size}
     :as   opts}]
   (proxy [ChannelInitializer] []
@@ -176,10 +181,9 @@
             codec        (HttpServerCodec. 4096 8192 (int chunk-size))
             handler      (netty-handler ring-handler handler-opts)
             pipeline     (.pipeline ^io.netty.channel.Channel channel)]
-        (when read-timeout
-          (.addLast pipeline "read-timeout" (ReadTimeoutHandler. read-timeout)))
-
         (.addLast pipeline "codec"      codec)
+        (when idle-timeout
+          (.addFirst pipeline "idle-state" (IdleStateHandler. 0 0 idle-timeout)))
         (.addLast pipeline "handler"    handler)))))
 
 (defn set-so-backlog!
