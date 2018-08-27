@@ -126,9 +126,10 @@
    supplied function.
    We can use volatiles for keeping track of state due to the thread-safe
    nature of handler adapters."
-  [handler {:keys [inbuf executor]}]
-  (let [inbuf (or inbuf default-inbuf)
-        state (volatile! {})]
+  [handler {:keys [inbuf executor channel]
+            :or   {inbuf default-inbuf
+                   allow-half-closure false}}]
+  (let [state (volatile! {})]
     (proxy [ChannelInboundHandlerAdapter] []
       (userEventTriggered [^ChannelHandlerContext ctx ev]
         (if (instance? IdleStateEvent ev)
@@ -138,6 +139,10 @@
         (let [ch (:chan @state)]
           (notify-bad-request! handler nil ctx ch e)
           (close-channel ctx ch true)))
+      (channelRegistered [^ChannelHandlerContext ctx]
+        (let [chan-config (.config (.channel ctx))]
+          (doseq [[k v] channel :let [copt (net.ty.bootstrap/->channel-option k)]]
+            (.setOption chan-config copt (if (number? v) (int v) v)))))
       (channelInactive [^ChannelHandlerContext ctx]
         (close-channel ctx (:chan @state) true))
       (channelRead [^ChannelHandlerContext ctx msg]
@@ -177,7 +182,7 @@
     :as   opts}]
   (proxy [ChannelInitializer] []
     (initChannel [channel]
-      (let [handler-opts (select-keys opts [:inbuf :executor])
+      (let [handler-opts (select-keys opts [:inbuf :executor :channel])
             codec        (HttpServerCodec. 4096 8192 (int chunk-size))
             handler      (netty-handler ring-handler handler-opts)
             pipeline     (.pipeline ^io.netty.channel.Channel channel)]
