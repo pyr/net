@@ -63,7 +63,7 @@
 
 (defn ^X509Certificate s->cert
   "Generate an X509 from a given source."
-  [factory input]
+  [^CertificateFactory factory input]
   (.generateCertificate ^CertificateFactory factory
                         (ByteArrayInputStream. (cert-bytes input))))
 
