@@ -265,7 +265,7 @@
    (let [boss-group  (http/make-boss-group options)
          [host port] (get-host-port options)]
      (try
-       (let [bootstrap (bs/server-bootstrap {:config  (merge {:so-backlog 256 :so-reuseaddr true}
+       (let [bootstrap (bs/server-bootstrap {:options (merge {:so-backlog 256 :so-reuseaddr true}
                                                              (:bootstrap options))
                                              :group   boss-group
                                              :channel (if (or (:disable-epoll? options)
