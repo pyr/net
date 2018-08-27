@@ -75,7 +75,7 @@ waiting for results:
      p))
 	 
 (go
-  (let [resp (<! (send-xhr "http://spootnik.org"))]
+  (let [response (<! (send-xhr "http://spootnik.org"))]
     (handle-body response)))
 ```
 
