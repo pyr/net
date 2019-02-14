@@ -3,14 +3,14 @@
   (:require [net.ty.channel  :as chan]
             [net.ty.pipeline :refer [*channel*]]
             [clojure.java.io :refer [input-stream]])
-  (:import java.security.KeyStore
+  (:import java.util.Base64
+           java.security.KeyStore
            java.security.KeyFactory
            java.security.PrivateKey
            java.security.cert.X509Certificate
            java.security.cert.CertificateFactory
            java.security.spec.PKCS8EncodedKeySpec
            java.io.ByteArrayInputStream
-           javax.xml.bind.DatatypeConverter
            io.netty.channel.ChannelHandler
            io.netty.channel.Channel
            io.netty.handler.ssl.SslContext
@@ -54,7 +54,7 @@
     :else
     input))
 
-(defn cert-bytes
+(defn ^"[B" cert-bytes
   "Get certificate bytes out of an input."
   [input]
   (if (instance? (Class/forName "[B") input)
@@ -73,7 +73,7 @@
   Since these keys are usually DER encoded, they're unconvienent to
   have laying around in strings. We resort to base64 encoded DER here."
   [^KeyFactory factory input]
-  (let [bytes (DatatypeConverter/parseBase64Binary (cert-string input))
+  (let [bytes (.encode (Base64/getEncoder) (cert-bytes input))
         kspec (PKCS8EncodedKeySpec. bytes)]
     (.generatePrivate factory kspec)))
 
