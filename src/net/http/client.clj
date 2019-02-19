@@ -49,7 +49,6 @@
            io.netty.handler.ssl.SslHandler
            java.net.URI
            java.nio.charset.Charset
-           javax.xml.bind.DatatypeConverter
            clojure.core.async.impl.protocols.Channel))
 
 (def default-inbuf 10)
