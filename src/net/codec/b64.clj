@@ -10,14 +10,14 @@
 (defn ^String s->b64
   "Convert a string to base64"
   [^String s]
-  (s->b64 (.getBytes s "UTF-8")))
+  (b->b64 (.getBytes s "UTF-8")))
 
 (defn ^"[B" b64->b
   ""
   [^String s]
-  (.encode (Base64/getEncoder) (.getBytes s)))
+  (.decode (Base64/getDecoder) (.getBytes s)))
 
 (defn ^String b64->s
   ""
   [^String s]
-  (String. (b64->b)))
+  (String. (b64->b s)))
