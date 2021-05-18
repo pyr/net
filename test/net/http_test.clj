@@ -61,9 +61,14 @@
                    :uri            (str "http://localhost:" port)
                    :transform      st/transform})
              success-response)))
+    (testing "uri with + supported"
+      (doseq [[uri resp] [["/gong-site-bucket/gong-team-logo-2020.jpg?mtime=20210204200512&focal=50.92+26" success-response "Handle + in URI"]
+                          ["/gong-site-bucket/gong-team-logo-2020.jpg?mtime=20210204200512&focal=50.92%2026" success-response "Handle %20 in URI"]]]
+        (is (= resp
+               (req {:request-method :get
+                     :uri            (str "http://localhost:" port uri)
+                     :transform      st/transform})))))
     (server)))
-
-
 
 (deftest error-tests
   (is (thrown-with-msg?

@@ -142,16 +142,19 @@
 (defn ->request
   "Create a request map from a Netty Http Request"
   [^HttpRequest msg]
-  (let [dx   (QueryStringDecoder. (str/replace (.uri msg) "+" "%20"))
-        hdrs (headers/as-map (.headers msg))
-        p1   (->params dx)]
-    {:uri            (.path dx)
-     :raw-uri        (.rawPath dx)
-     :get-params     p1
-     :params         p1
-     :request-method (method->data (.method msg))
-     :version        (-> msg .protocolVersion .text)
-     :headers        hdrs}))
+  (try
+    (let [dx   (QueryStringDecoder. (.uri msg))
+          hdrs (headers/as-map (.headers msg))
+          p1   (->params dx)]
+      {:uri            (.path dx)
+       :raw-uri        (.rawPath dx)
+       :get-params     p1
+       :params         p1
+       :request-method (method->data (.method msg))
+       :version        (-> msg .protocolVersion .text)
+       :headers        hdrs})
+    (catch Exception _
+      nil)))
 
 (defn protocol-version
   [^HttpRequest msg]
