@@ -154,9 +154,9 @@
               (notify-bad-request! handler msg ctx (:chan @state)
                                    "Trailing content on request")
               
-              (nil? request)
+              (= :net.http/unparsable-request request)
               (notify-bad-request! handler msg ctx (:chan @state)
-                                   "Invalid request")
+                                   "Unparsable request")
               
               :else
               (let [in      (a/chan inbuf)

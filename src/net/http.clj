@@ -154,7 +154,7 @@
        :version        (-> msg .protocolVersion .text)
        :headers        hdrs})
     (catch Exception _
-      nil)))
+      ::unparsable-request)))
 
 (defn protocol-version
   [^HttpRequest msg]
