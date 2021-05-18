@@ -149,9 +149,16 @@
         (cond
           (instance? HttpRequest msg)
           (let [request (http/->request msg)]
-            (if (bad? request)
+            (cond 
+              (bad? request)
               (notify-bad-request! handler msg ctx (:chan @state)
                                    "Trailing content on request")
+              
+              (= :net.http/unparsable-request request)
+              (notify-bad-request! handler msg ctx (:chan @state)
+                                   "Unparsable request")
+              
+              :else
               (let [in      (a/chan inbuf)
                     version (http/protocol-version msg)
                     bodyreq (assoc request
