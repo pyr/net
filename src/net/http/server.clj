@@ -20,8 +20,7 @@
             [net.core.concurrent   :as nc]
             [net.core.async        :as na]
             [clojure.core.async    :as a]
-            [clojure.spec.alpha    :as s]
-            [net.core.async        :refer [put!]])
+            [clojure.spec.alpha    :as s])
   (:import io.netty.channel.ChannelHandlerContext
            io.netty.channel.ChannelInboundHandlerAdapter
            io.netty.channel.ChannelHandler
@@ -111,7 +110,7 @@
 
 (defn notify-bad-request!
   [handler msg ctx ch e]
-  (when (some? msg)
+  (when (buf/buffer? msg)
     (buf/release msg))
   (close-channel ctx ch false)
   (handler {:type           :error
@@ -127,8 +126,7 @@
    We can use volatiles for keeping track of state due to the thread-safe
    nature of handler adapters."
   [handler {:keys [inbuf executor channel]
-            :or   {inbuf default-inbuf
-                   allow-half-closure false}}]
+            :or   {inbuf default-inbuf}}]
   (let [state (volatile! {})]
     (proxy [ChannelInboundHandlerAdapter] []
       (userEventTriggered [^ChannelHandlerContext ctx ev]
@@ -146,40 +144,48 @@
       (channelInactive [^ChannelHandlerContext ctx]
         (close-channel ctx (:chan @state) true))
       (channelRead [^ChannelHandlerContext ctx msg]
-        (cond
-          (instance? HttpRequest msg)
-          (let [request (http/->request msg)]
-            (cond 
-              (bad? request)
-              (notify-bad-request! handler msg ctx (:chan @state)
-                                   "Trailing content on request")
-              
-              (= :net.http/unparsable-request request)
-              (notify-bad-request! handler msg ctx (:chan @state)
-                                   "Unparsable request")
-              
-              :else
-              (let [in      (a/chan inbuf)
-                    version (http/protocol-version msg)
-                    bodyreq (assoc request
-                                   :body in
-                                   :is-100-continue-expected? (HttpUtil/is100ContinueExpected msg)
-                                   :send-100-continue! (send-100-continue-fn ctx msg))]
-                (get-response (vswap! state assoc
-                                      :version version
-                                      :chan in
-                                      :request bodyreq)
-                              handler ctx executor))))
+        (let [chan (:chan @state)
+              close-resources (fn []
+                                (when (buf/buffer? msg)
+                                  (buf/release msg))
+                                (chan/close! ctx)
+                                (when chan
+                                  (a/close! chan)))]
+          (cond
+            (instance? HttpRequest msg)
+            (let [request (http/->request msg)
+                  version (http/protocol-version msg)
+                  respond! (partial write-response ctx version)]
 
-          (chunk/content-chunk? msg)
-          (chunk/enqueue (:chan @state) ctx msg)
+              (cond
+                (= :net.http/unparsable-request request)
+                (respond! (notify-bad-request! handler msg ctx nil "Unparsable request"))
 
-          :else
-          (do
-            (buf/release msg)
-            (chan/close! ctx)
-            (a/close! (:chan @state))
-            (throw (IllegalArgumentException. "unhandled message chunk on body channel"))))))))
+                (bad? request)
+                (respond! (notify-bad-request! handler msg ctx nil "Trailing content on request"))
+
+                :else
+                (let [in      (a/chan inbuf)
+                      bodyreq (assoc request
+                                     :body in
+                                     :is-100-continue-expected? (HttpUtil/is100ContinueExpected msg)
+                                     :send-100-continue! (send-100-continue-fn ctx msg))]
+                  (get-response (vswap! state assoc
+                                        :version version
+                                        :chan in
+                                        :request bodyreq)
+                                handler ctx executor))))
+
+            (and chan chunk/content-chunk? msg)
+            (chunk/enqueue chan ctx msg)
+
+            (chunk/content-chunk? msg)
+            (close-resources)
+
+            :else
+            (do
+              (close-resources)
+              (throw (IllegalArgumentException. "unhandled message chunk on body channel")))))))))
 
 (defn initializer
   "An initializer is a per-connection context creator.
