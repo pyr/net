@@ -1,6 +1,5 @@
 (ns server.echo-http
   (:require [net.http.server       :as http]
-            [net.ty.buffer         :as buf]
             [clojure.core.async    :as a]
             [clojure.tools.logging :refer [info]]))
 

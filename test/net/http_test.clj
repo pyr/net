@@ -1,11 +1,20 @@
 (ns net.http-test
-  (:require [net.http.client      :as client]
+  (:require [net.http.chunk     :as chunk]
+            [net.http.client      :as client]
             [net.http.server      :as server]
             [net.http             :as http]
+            [net.ty.bootstrap   :as bs]
             [net.ty.buffer        :as buf]
+            [net.ty.channel     :as chan]
+            [net.ty.future      :as f]
             [net.transform.string :as st]
             [clojure.core.async   :as a]
-            [clojure.test         :refer :all]))
+            [clojure.test         :refer :all])
+  (:import  io.netty.handler.codec.http.HttpHeaders
+            io.netty.handler.codec.http.HttpMethod
+            io.netty.handler.codec.http.HttpVersion
+            io.netty.handler.codec.http.DefaultHttpRequest
+            clojure.core.async.impl.protocols.Channel))
 
 (defn get-port
   []
@@ -23,6 +32,15 @@
 (def success-handler
   (constantly success-response))
 
+(def bad-response
+  {:status 400
+   :version "HTTP/1.1"
+   :body ""
+   :headers {:connection "close"}})
+
+(def bad-handler
+  (constantly bad-response))
+
 (defn echo-handler
   [{:keys [body headers]}]
   (assoc success-response
@@ -30,10 +48,39 @@
          :headers {:connection     "close"
                    :content-length (or (:content-length headers) 0)}))
 
-(defn req
-  [payload]
-  (let [{:keys [body] :as resp} (client/request payload)]
-    (cond-> resp (some? body) (assoc :body (a/<!! body)))))
+(defn async-request
+  "Execute an asynchronous HTTP request, produce the response
+   asynchronously on the provided `handler` function.
+
+   If no client is provided, create one."
+  ([request-map handler]
+   (async-request (client/build-client {}) request-map handler))
+  ([{:keys [group channel ssl-ctx]} request-map handler]
+   (when-not (:uri request-map)
+     (throw (ex-info "malformed request-map, needs :uri key" {})))
+   (let [transform   (:transform request-map)
+         initializer (client/request-initializer false ssl-ctx handler transform nil nil)
+         bs          (bs/bootstrap {:group   group
+                                    :channel channel
+                                    :handler initializer})
+         chan        (some-> bs (bs/connect! "localhost" (request-map :port)) chan/sync! chan/channel)
+         body        (chunk/prepare-body (:body request-map))
+         req         (DefaultHttpRequest. HttpVersion/HTTP_1_1 HttpMethod/GET ^String (:uri request-map) HttpHeaders/EMPTY_HEADERS)]
+     (f/with-result [ftr (chan/write-and-flush! chan req)]
+       (if (instance? Channel body)
+         (chunk/start-write-listener chan body)
+         (chan/write-and-flush! chan body)))
+     chan)))
+
+(defn extract-body [{:keys [body] :as resp}]
+  (cond-> resp (some? body) (assoc :body (a/<!! body))))
+
+(defn raw-req [payload]
+  (let [p (promise)]
+    (async-request payload #(deliver p %))
+    (extract-body @p)))
+
+(defn req [payload] (extract-body (client/request payload)))
 
 (deftest echo-server
   (let [port   (get-port)
@@ -81,11 +128,36 @@
 (defn http-request [uri]
   (reify io.netty.handler.codec.http.HttpRequest
     (uri [this] uri)
-    (headers [this] (io.netty.handler.codec.http.HttpHeaders/EMPTY_HEADERS))
-    (method [this] (io.netty.handler.codec.http.HttpMethod/GET))
-    (protocolVersion [this] (io.netty.handler.codec.http.HttpVersion/HTTP_1_1))))
+    (headers [this] (HttpHeaders/EMPTY_HEADERS))
+    (method [this] (HttpMethod/GET))
+    (protocolVersion [this] (HttpVersion/HTTP_1_1))))
 
 (def invalid-uri "file.jpg?mtime=20210218162931&focal=30.92%%2050.13%&tmtime=20210324130011")
+
+(deftest bad-requests
+  (let [port (get-port)
+        server (server/run-server {:port port} bad-handler)]
+    (testing "invalid uri"
+      (is
+       (= (raw-req {:port port
+                    :body "foo"
+                    :transform st/transform
+                    :uri (str "http://localhost:" port "/" invalid-uri)})
+          (assoc bad-response
+                 :body ""
+                 :headers {:connection "close"}))))
+    #_
+    (testing "invalid uri + chunked"
+      (is
+       (= (raw-req {:port port
+                    :body (a/to-chan (mapv buf/wrapped-string ["foo" "bar" "baz"]))
+                    :transform st/transform
+                    :uri (str "http://localhost:" port "/" invalid-uri)})
+          (assoc bad-response
+                 :body ""
+                 :headers {:connection "close"}))))
+    (server)))
+
 
 (deftest ->request-test
   (testing "invalid uri"
