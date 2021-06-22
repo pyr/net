@@ -161,7 +161,8 @@
                                 (when chan
                                   (a/close! chan)))]
           (cond
-            ;; When it's a new HTTP request, we are creating a core/async and we are passing it to the handler.
+            ;; When it's a new HTTP request, we are creating a core/async channel and
+            ;; we are passing it to the handler.
             (instance? HttpRequest msg)
             (let [request (http/->request msg)
                   version (http/protocol-version msg)]
