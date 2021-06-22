@@ -130,7 +130,7 @@
 
 (def invalid-uri "file.jpg?mtime=20210218162931&focal=30.92%%2050.13%&tmtime=20210324130011")
 
-(deftest bad-requests
+(deftest bad-request-invalid-uri
   (let [port (get-port)
         server (server/run-server {:port port} (constantly 42))]
     (testing "invalid uri"
@@ -144,6 +144,11 @@
            :headers {}
            :version "HTTP/1.1"
            :body ""})))
+    (server)))
+
+(deftest bad-request-invalid-uri-chunked
+  (let [port (get-port)
+        server (server/run-server {:port port} (constantly 42))]
     (testing "invalid uri + chunked"
       (is
        (= (raw-req {:request-method :post
@@ -158,7 +163,6 @@
            :version "HTTP/1.1"
            :body ""})))
     (server)))
-
 
 (deftest ->request-test
   (testing "invalid uri"

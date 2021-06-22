@@ -113,8 +113,8 @@
 
 (defn notify-bad-request!
   [handler msg ctx ch e]
-  (when (buf/buffer? msg)
-    (buf/release msg))
+  (when (satisfies? buf/Bufferizable msg)
+    (buf/release (buf/as-buffer msg)))
   (close-channel ctx ch false)
   (handler {:type           :error
             :error          (if (string? e)
@@ -155,12 +155,13 @@
       (channelRead [^ChannelHandlerContext ctx msg]
         (let [chan (:chan @state)
               close-resources (fn []
-                                (when (buf/buffer? msg)
-                                  (buf/release msg))
+                                (when (satisfies? buf/Bufferizable msg)
+                                  (buf/release (buf/as-buffer msg)))
                                 (chan/close! ctx)
                                 (when chan
                                   (a/close! chan)))]
           (cond
+            ;; When it's a new HTTP request, we are creating a core/async and we are passing it to the handler.
             (instance? HttpRequest msg)
             (let [request (http/->request msg)
                   version (http/protocol-version msg)]
@@ -184,9 +185,12 @@
                                         :request bodyreq)
                                 handler ctx executor))))
 
+            ;; When it's data, we are sending the content to the previously opened core/async channel.
             (and chan (chunk/content-chunk? msg))
             (chunk/enqueue chan ctx msg)
 
+            ;; When it's data and the core/async channel is not present, we close the resources
+            ;; without throwing
             (chunk/content-chunk? msg)
             (close-resources)
 
