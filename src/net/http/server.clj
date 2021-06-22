@@ -123,7 +123,9 @@
             :request-method :error
             :ctx            ctx}))
 
-(defn reject-invalid-request [ctx version]
+(defn reject-invalid-request [ctx msg version]
+  (when (satisfies? buf/Bufferizable msg)
+    (buf/release (buf/as-buffer msg)))
   (let [resp (DefaultFullHttpResponse. version
                                        HttpResponseStatus/REQUEST_URI_TOO_LONG)]
     (f/with-result [ftr (chan/write-and-flush! ctx resp)]
@@ -169,7 +171,7 @@
 
               (cond
                 (= :net.http/unparsable-request request)
-                (reject-invalid-request ctx version)
+                (reject-invalid-request ctx msg version)
 
                 (bad? request)
                 (notify-bad-request! handler msg ctx nil "Trailing content on request")
