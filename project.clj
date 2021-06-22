@@ -27,4 +27,6 @@
                  [io.netty/netty-all                       "4.1.33.Final"]
                  [io.netty/netty-tcnative                  "2.0.22.Final"]
                  [io.netty/netty-tcnative-boringssl-static "2.0.22.Final"]]
+  :test-selectors {:default (complement :ignore)
+                   :ignore :ignore}
   :global-vars {*warn-on-reflection* true})

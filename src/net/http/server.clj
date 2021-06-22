@@ -20,16 +20,18 @@
             [net.core.concurrent   :as nc]
             [net.core.async        :as na]
             [clojure.core.async    :as a]
-            [clojure.spec.alpha    :as s]
-            [net.core.async        :refer [put!]])
+            [clojure.spec.alpha    :as s])
   (:import io.netty.channel.ChannelHandlerContext
            io.netty.channel.ChannelInboundHandlerAdapter
            io.netty.channel.ChannelHandler
            io.netty.channel.ChannelOption
            io.netty.channel.ChannelInitializer
+           io.netty.handler.codec.http.DefaultFullHttpResponse
            io.netty.handler.codec.http.HttpServerCodec
            io.netty.handler.codec.http.HttpUtil
            io.netty.handler.codec.http.HttpRequest
+           io.netty.handler.codec.http.HttpResponseStatus
+           io.netty.handler.codec.http.HttpVersion
            io.netty.handler.timeout.IdleStateHandler
            io.netty.handler.timeout.IdleStateEvent
            io.netty.bootstrap.AbstractBootstrap
@@ -111,8 +113,8 @@
 
 (defn notify-bad-request!
   [handler msg ctx ch e]
-  (when (some? msg)
-    (buf/release msg))
+  (when (satisfies? buf/Bufferizable msg)
+    (buf/release (buf/as-buffer msg)))
   (close-channel ctx ch false)
   (handler {:type           :error
             :error          (if (string? e)
@@ -121,14 +123,21 @@
             :request-method :error
             :ctx            ctx}))
 
+(defn reject-invalid-request [ctx msg version]
+  (when (satisfies? buf/Bufferizable msg)
+    (buf/release (buf/as-buffer msg)))
+  (let [resp (DefaultFullHttpResponse. version
+                                       HttpResponseStatus/REQUEST_URI_TOO_LONG)]
+    (f/with-result [ftr (chan/write-and-flush! ctx resp)]
+      (chan/close! (chan/channel ftr)))))
+
 (defn ^ChannelHandler netty-handler
   "This is a stateful, per HTTP session adapter which wraps the user
    supplied function.
    We can use volatiles for keeping track of state due to the thread-safe
    nature of handler adapters."
   [handler {:keys [inbuf executor channel]
-            :or   {inbuf default-inbuf
-                   allow-half-closure false}}]
+            :or   {inbuf default-inbuf}}]
   (let [state (volatile! {})]
     (proxy [ChannelInboundHandlerAdapter] []
       (userEventTriggered [^ChannelHandlerContext ctx ev]
@@ -146,40 +155,52 @@
       (channelInactive [^ChannelHandlerContext ctx]
         (close-channel ctx (:chan @state) true))
       (channelRead [^ChannelHandlerContext ctx msg]
-        (cond
-          (instance? HttpRequest msg)
-          (let [request (http/->request msg)]
-            (cond 
-              (bad? request)
-              (notify-bad-request! handler msg ctx (:chan @state)
-                                   "Trailing content on request")
-              
-              (= :net.http/unparsable-request request)
-              (notify-bad-request! handler msg ctx (:chan @state)
-                                   "Unparsable request")
-              
-              :else
-              (let [in      (a/chan inbuf)
-                    version (http/protocol-version msg)
-                    bodyreq (assoc request
-                                   :body in
-                                   :is-100-continue-expected? (HttpUtil/is100ContinueExpected msg)
-                                   :send-100-continue! (send-100-continue-fn ctx msg))]
-                (get-response (vswap! state assoc
-                                      :version version
-                                      :chan in
-                                      :request bodyreq)
-                              handler ctx executor))))
+        (let [chan (:chan @state)
+              close-resources (fn []
+                                (when (satisfies? buf/Bufferizable msg)
+                                  (buf/release (buf/as-buffer msg)))
+                                (chan/close! ctx)
+                                (when chan
+                                  (a/close! chan)))]
+          (cond
+            ;; When it's a new HTTP request, we are creating a core/async channel and
+            ;; we are passing it to the handler.
+            (instance? HttpRequest msg)
+            (let [request (http/->request msg)
+                  version (http/protocol-version msg)]
 
-          (chunk/content-chunk? msg)
-          (chunk/enqueue (:chan @state) ctx msg)
+              (cond
+                (= :net.http/unparsable-request request)
+                (reject-invalid-request ctx msg version)
 
-          :else
-          (do
-            (buf/release msg)
-            (chan/close! ctx)
-            (a/close! (:chan @state))
-            (throw (IllegalArgumentException. "unhandled message chunk on body channel"))))))))
+                (bad? request)
+                (notify-bad-request! handler msg ctx nil "Trailing content on request")
+
+                :else
+                (let [in      (a/chan inbuf)
+                      bodyreq (assoc request
+                                     :body in
+                                     :is-100-continue-expected? (HttpUtil/is100ContinueExpected msg)
+                                     :send-100-continue! (send-100-continue-fn ctx msg))]
+                  (get-response (vswap! state assoc
+                                        :version version
+                                        :chan in
+                                        :request bodyreq)
+                                handler ctx executor))))
+
+            ;; When it's data, we are sending the content to the previously opened core/async channel.
+            (and chan (chunk/content-chunk? msg))
+            (chunk/enqueue chan ctx msg)
+
+            ;; When it's data and the core/async channel is not present, we close the resources
+            ;; without throwing
+            (chunk/content-chunk? msg)
+            (close-resources)
+
+            :else
+            (do
+              (close-resources)
+              (throw (IllegalArgumentException. "unhandled message chunk on body channel")))))))))
 
 (defn initializer
   "An initializer is a per-connection context creator.
