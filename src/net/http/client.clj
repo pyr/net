@@ -62,7 +62,8 @@
         :body    body})
     (finally
       ;; This actually releases the content
-      (buf/release (buf/as-buffer msg)))))
+      (when (satisfies? buf/Bufferizable msg)
+        (buf/release (buf/as-buffer msg))))))
 
 (defn ^ChannelInboundHandlerAdapter netty-handler
   "Simple netty-handler, everything may happen in

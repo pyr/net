@@ -9,7 +9,9 @@
             [net.ty.future      :as f]
             [net.transform.string :as st]
             [clojure.core.async   :as a]
-            [clojure.test         :refer :all])
+            [clojure.test         :refer :all]
+            [net.http.request :as req]
+            [net.http.headers :as headers])
   (:import  io.netty.handler.codec.http.HttpHeaders
             io.netty.handler.codec.http.HttpMethod
             io.netty.handler.codec.http.HttpVersion
@@ -31,15 +33,6 @@
 
 (def success-handler
   (constantly success-response))
-
-(def bad-response
-  {:status 400
-   :version "HTTP/1.1"
-   :body ""
-   :headers {:connection "close"}})
-
-(def bad-handler
-  (constantly bad-response))
 
 (defn echo-handler
   [{:keys [body headers]}]
@@ -65,7 +58,10 @@
                                     :handler initializer})
          chan        (some-> bs (bs/connect! "localhost" (request-map :port)) chan/sync! chan/channel)
          body        (chunk/prepare-body (:body request-map))
-         req         (DefaultHttpRequest. HttpVersion/HTTP_1_1 HttpMethod/GET ^String (:uri request-map) HttpHeaders/EMPTY_HEADERS)]
+         req         (DefaultHttpRequest. HttpVersion/HTTP_1_1
+                                          (req/data->method (:method request-map))
+                                          ^String (:uri request-map)
+                                          (headers/prepare (:headers request-map)))]
      (f/with-result [ftr (chan/write-and-flush! chan req)]
        (if (instance? Channel body)
          (chunk/start-write-listener chan body)
@@ -136,26 +132,31 @@
 
 (deftest bad-requests
   (let [port (get-port)
-        server (server/run-server {:port port} bad-handler)]
+        server (server/run-server {:port port} (constantly 42))]
     (testing "invalid uri"
       (is
-       (= (raw-req {:port port
+       (= (raw-req {:request-method :post
+                    :port port
                     :body "foo"
                     :transform st/transform
                     :uri (str "http://localhost:" port "/" invalid-uri)})
-          (assoc bad-response
-                 :body ""
-                 :headers {:connection "close"}))))
-    #_
+          {:status 414
+           :headers {}
+           :version "HTTP/1.1"
+           :body ""})))
     (testing "invalid uri + chunked"
       (is
-       (= (raw-req {:port port
+       (= (raw-req {:request-method :post
+                    :headers {:transfer-encoding "chunked"
+                              :content-length 9}
+                    :port port
                     :body (a/to-chan (mapv buf/wrapped-string ["foo" "bar" "baz"]))
                     :transform st/transform
                     :uri (str "http://localhost:" port "/" invalid-uri)})
-          (assoc bad-response
-                 :body ""
-                 :headers {:connection "close"}))))
+          {:status 414
+           :headers {}
+           :version "HTTP/1.1"
+           :body ""})))
     (server)))
 
 

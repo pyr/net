@@ -26,9 +26,12 @@
            io.netty.channel.ChannelHandler
            io.netty.channel.ChannelOption
            io.netty.channel.ChannelInitializer
+           io.netty.handler.codec.http.DefaultFullHttpResponse
            io.netty.handler.codec.http.HttpServerCodec
            io.netty.handler.codec.http.HttpUtil
            io.netty.handler.codec.http.HttpRequest
+           io.netty.handler.codec.http.HttpResponseStatus
+           io.netty.handler.codec.http.HttpVersion
            io.netty.handler.timeout.IdleStateHandler
            io.netty.handler.timeout.IdleStateEvent
            io.netty.bootstrap.AbstractBootstrap
@@ -120,6 +123,12 @@
             :request-method :error
             :ctx            ctx}))
 
+(defn reject-invalid-request [ctx version]
+  (let [resp (DefaultFullHttpResponse. version
+                                       HttpResponseStatus/REQUEST_URI_TOO_LONG)]
+    (f/with-result [ftr (chan/write-and-flush! ctx resp)]
+      (chan/close! (chan/channel ftr)))))
+
 (defn ^ChannelHandler netty-handler
   "This is a stateful, per HTTP session adapter which wraps the user
    supplied function.
@@ -154,15 +163,14 @@
           (cond
             (instance? HttpRequest msg)
             (let [request (http/->request msg)
-                  version (http/protocol-version msg)
-                  respond! (partial write-response ctx version)]
+                  version (http/protocol-version msg)]
 
               (cond
                 (= :net.http/unparsable-request request)
-                (respond! (notify-bad-request! handler msg ctx nil "Unparsable request"))
+                (reject-invalid-request ctx version)
 
                 (bad? request)
-                (respond! (notify-bad-request! handler msg ctx nil "Trailing content on request"))
+                (notify-bad-request! handler msg ctx nil "Trailing content on request")
 
                 :else
                 (let [in      (a/chan inbuf)
@@ -176,7 +184,7 @@
                                         :request bodyreq)
                                 handler ctx executor))))
 
-            (and chan chunk/content-chunk? msg)
+            (and chan (chunk/content-chunk? msg))
             (chunk/enqueue chan ctx msg)
 
             (chunk/content-chunk? msg)
